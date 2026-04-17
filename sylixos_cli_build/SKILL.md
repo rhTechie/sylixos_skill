@@ -1,6 +1,6 @@
 ---
 name: sylixos_cli_build
-description: Use when building SylixOS companion projects from Linux CLI. Always discover the real base, compatibility layer, license SDK, and BSP directories first, then configure both config.mk and command-line overrides with absolute paths only.
+description: Use when building SylixOS companion projects from Linux CLI. Always discover the real base, compatibility layer, license SDK, and BSP directories first, then persist all configurable build paths and platform variables into each project's config.mk with absolute paths. Keep command-line parameters only for items that cannot live in config.mk, such as -f <multi-platform.mk>.
 ---
 
 # SylixOS CLI Build
@@ -8,6 +8,16 @@ description: Use when building SylixOS companion projects from Linux CLI. Always
 Use this skill when a workspace contains a SylixOS base project plus companion projects such as a Linux compatibility layer, a license SDK, and a BSP.
 
 Critical rule: all build paths must use absolute paths.
+
+Critical rule: for every project handled with this skill, if a build variable can
+be persisted in the project's `config.mk`, it must be written into `config.mk`
+instead of relying on a command-line override.
+
+This is a universal rule for all future projects built with this skill, not a
+project-specific suggestion.
+
+Keep command-line parameters only for values that cannot be stored in `config.mk`,
+such as the `-f "$MULTI_MK"` build entry itself.
 
 This applies to both:
 
@@ -82,9 +92,20 @@ FPU_TYPE=default
 
 ## Config Update Strategy
 
-Preferred outcome: modify each companion project `config.mk` so the project can be built later with plain `make` from its own directory, without extra command-line variables.
+Preferred outcome: modify each companion project `config.mk` so the project can be
+built later with plain `make` from its own directory plus the required
+`-f "$MULTI_MK"` entry, without extra command-line variable overrides.
 
 All path variables must be absolute paths.
+
+If a variable can live in `config.mk`, do not leave it as a habitual command-line
+override. Persist it in `config.mk` for later manual builds.
+
+This applies to every follow-up project in the workspace as well:
+
+- first fix `config.mk`
+- then build with `-f "$MULTI_MK"`
+- do not treat a command-line variable override as the finished solution if that variable could have been stored in `config.mk`
 
 What to update:
 
@@ -92,6 +113,7 @@ What to update:
 - `LINUX_COMPAT_LAYER_PATH` when present
 - `LICENSE_SDK_PATH` when present
 - `PLATFORMS`
+- project-specific path variables referenced by local makefiles, for example `WORKSPACE_libdrv_linux_compat`
 
 Rules:
 
@@ -154,7 +176,18 @@ make -C "$BSP" clean -f "$MULTI_MK"
 
 ## Command-Line Override Rule
 
-If `config.mk` is not yet fixed, command-line overrides must also use absolute paths only.
+If `config.mk` is not yet fixed, command-line overrides must also use absolute
+paths only. This is fallback behavior, not the preferred steady state.
+
+Do not keep passing variables on the command line once they can be written into
+`config.mk`. The usual remaining command-line-only piece is the `-f "$MULTI_MK"`
+selection.
+
+For every project using this skill, the final handoff state must move all
+persistable variables into `config.mk`. Do not leave the user with a build
+procedure that still depends on command-line overrides for `SYLIXOS_BASE_PATH`,
+`LINUX_COMPAT_LAYER_PATH`, `LICENSE_SDK_PATH`, `PLATFORMS`, or project-local
+workspace path variables if those can be defined in `config.mk`.
 
 Example shape:
 
@@ -170,7 +203,9 @@ Do not pass relative paths in command-line overrides.
 
 ## Validation
 
-After editing `config.mk`, verify that plain `make` works from each project directory without extra parameters:
+After editing `config.mk`, verify that plain `make` works from each project
+directory without extra variable parameters, keeping only the required
+`-f "$MULTI_MK"` build entry:
 
 ```sh
 make -C "$LICENSE" all -f "$MULTI_MK"
