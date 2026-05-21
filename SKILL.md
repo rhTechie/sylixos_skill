@@ -1,6 +1,6 @@
 ---
 name: sylixos
-description: Master skill for SylixOS development workflow. Automatically determines whether to handle Linux-to-SylixOS porting analysis, build projects, or upload files to target boards based on the user's request.
+description: Master skill for SylixOS development workflow. Automatically determines whether to handle Linux-to-SylixOS porting analysis, build projects, upload files to target boards, or run telnet-based board-side tests based on the user's request.
 ---
 
 # SylixOS Development Workflow
@@ -14,7 +14,8 @@ Use this skill for any SylixOS development task, including:
 - Summarizing verified SylixOS migration experience from an existing project
 - Building/compiling SylixOS projects
 - Uploading files to target boards
-- Complete development workflow (build + upload)
+- Running tests on target boards over telnet
+- Complete development workflow (build + upload + test)
 
 ## Sub-Skills
 
@@ -53,7 +54,25 @@ This master skill delegates to specialized sub-skills:
 
 **Location:** `sylixos_ftp_upload/SKILL.md`
 
-### 3. `sylixos-driver-porting` - Linux Driver/SDK Porting Analysis
+### 3. `sylixos_telnet_test` - Telnet Login and Board Test
+
+**Trigger conditions:**
+- User asks to telnet to the board
+- User mentions "测试", "test", "板卡验证", "run on board"
+- User wants to execute uploaded files on hardware
+- User asks for build + upload + test as one workflow
+
+**What it does:**
+- Resolves board IP, work directory, and uploaded remote paths
+- Verifies port `23` connectivity before login
+- Logs in with telnet using board credentials
+- Fixes execute permissions when needed
+- Runs the board-side test command and captures output
+- Reports actual runtime result from the target
+
+**Location:** `sylixos_telnet_test/SKILL.md`
+
+### 4. `sylixos-driver-porting` - Linux Driver/SDK Porting Analysis
 
 **Trigger conditions:**
 - User asks to port Linux driver or SDK code to SylixOS
@@ -91,6 +110,15 @@ User says:
 
 → Use `sylixos_ftp_upload` skill
 
+### Test Only
+User says:
+- "telnet 登录板卡测试"
+- "Run the uploaded app on board"
+- "执行板卡上的测试程序"
+- "上传后测试"
+
+→ Use `sylixos_telnet_test` skill
+
 ### Porting / Migration Analysis
 User says:
 - "把 Linux 驱动移植到 SylixOS"
@@ -110,6 +138,18 @@ User says:
 → Use both skills in sequence:
 1. First use `sylixos_cli_build` to compile
 2. If build succeeds, use `sylixos_ftp_upload` to upload
+
+### Build + Upload + Test
+User says:
+- "编译上传并测试"
+- "Build, deploy, and test on board"
+- "上传后通过 telnet 跑测试"
+- "Compile, upload, then run on hardware"
+
+→ Use three skills in sequence:
+1. First use `sylixos_cli_build` to compile
+2. If build succeeds, use `sylixos_ftp_upload` to upload
+3. If upload succeeds, use `sylixos_telnet_test` to run the board-side test
 
 ### Ambiguous Cases
 
@@ -160,7 +200,29 @@ Action:
 3. Report complete workflow results
 ```
 
-### Example 4: Fix and Deploy
+### Example 4: Build + Upload + Test
+
+```
+User: "编译 timer_test，上传到板卡并通过 telnet 测试"
+
+Action:
+1. Apply sylixos_cli_build skill
+   - Discover the real base project
+   - Update config.mk with absolute paths
+   - Build with multi-platform.mk
+2. If build succeeds:
+   - Apply sylixos_ftp_upload skill
+   - Parse .reproject
+   - Upload the built file to the board
+3. If upload succeeds:
+   - Apply sylixos_telnet_test skill
+   - Log in over telnet
+   - Verify remote file permissions
+   - Execute the board-side test command
+4. Report build, upload, and runtime test results
+```
+
+### Example 5: Fix and Deploy
 
 ```
 User: "修复编译错误并重新编译上传"
@@ -174,7 +236,7 @@ Action:
    - Upload to board
 ```
 
-### Example 5: Porting Summary
+### Example 6: Porting Summary
 
 ```
 User: "结合代码和移植文档，总结一个 SylixOS 驱动移植 skill"
@@ -222,13 +284,23 @@ Action:
 - Permission denied: Check FTP credentials
 - File not found: Ensure build completed successfully
 
+### Test Errors
+- Telnet port closed: Verify board telnet service is enabled
+- Login rejected: Verify telnet credentials
+- Uploaded file is not executable: Set octal mode such as `chmod 755`
+- Runtime command ambiguous: Require an explicit board-side test command
+- Program hangs or never returns: Report timeout and last visible output
+
 ## Integration Notes
 
 - These sub-skills are independent and can be used separately
 - Build skill may modify libdrv_linux_compat if needed
 - Upload skill assumes build artifacts exist
+- Test skill assumes the artifact is already on the board
 - Always verify build success before uploading
+- Always verify upload success before telnet testing
 - Default FTP credentials: root/root (can be overridden)
+- Default telnet credentials: root/root (can be overridden)
 
 ## Quick Reference
 
@@ -237,7 +309,9 @@ Action:
 | Porting | 移植, port, 适配, migration | sylixos-driver-porting |
 | Compile | 编译, build, compile, make | sylixos_cli_build |
 | Upload | 上传, upload, deploy, 部署 | sylixos_ftp_upload |
-| Both | 编译并上传, build and upload | Both in sequence |
+| Test on board | 测试, test, telnet, 板卡验证 | sylixos_telnet_test |
+| Build + Upload | 编译并上传, build and upload | Build then upload |
+| Build + Upload + Test | 编译上传并测试, deploy and test | Build then upload then test |
 | Fix errors | 修复, fix, 错误, error | sylixos_cli_build |
 
 ## Tips
@@ -245,6 +319,7 @@ Action:
 1. **Always check context**: Look for .reproject, config.mk, Makefile to identify project type
 2. **Verify prerequisites**: Base project, compat layer, toolchain must be available
 3. **Use absolute paths**: Never use relative paths in config.mk
-4. **Report clearly**: Show build/upload progress and final results
-5. **Handle errors gracefully**: If build fails, don't attempt upload
-6. **Ask when unclear**: Better to confirm than assume wrong action
+4. **Prefer board truth**: Use actual telnet runtime output as the final validation
+5. **Report clearly**: Show build/upload/test progress and final results
+6. **Handle errors gracefully**: If build fails, don't attempt upload; if upload fails, don't attempt test
+7. **Ask when unclear**: Better to confirm than assume wrong action
