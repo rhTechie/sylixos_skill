@@ -1,6 +1,6 @@
 ---
 name: sylixos
-description: Master skill for SylixOS development workflow. Automatically determines whether to build projects or upload files to target board based on user's request. Use this when working with SylixOS projects for compilation, deployment, or both.
+description: Master skill for SylixOS development workflow. Automatically determines whether to handle Linux-to-SylixOS porting analysis, build projects, or upload files to target boards based on the user's request.
 ---
 
 # SylixOS Development Workflow
@@ -10,6 +10,8 @@ This is the master skill for SylixOS development. It automatically routes to the
 ## When to Use
 
 Use this skill for any SylixOS development task, including:
+- Porting Linux drivers or SDKs to SylixOS
+- Summarizing verified SylixOS migration experience from an existing project
 - Building/compiling SylixOS projects
 - Uploading files to target boards
 - Complete development workflow (build + upload)
@@ -40,7 +42,6 @@ This master skill delegates to specialized sub-skills:
 **Trigger conditions:**
 - User asks to upload to board/device
 - User mentions "上传", "upload", "deploy", "部署"
-- User wants to test on hardware after build
 - User specifies a board IP or mentions target device
 
 **What it does:**
@@ -51,6 +52,22 @@ This master skill delegates to specialized sub-skills:
 - Reports upload results
 
 **Location:** `sylixos_ftp_upload/SKILL.md`
+
+### 3. `sylixos-driver-porting` - Linux Driver/SDK Porting Analysis
+
+**Trigger conditions:**
+- User asks to port Linux driver or SDK code to SylixOS
+- User asks to summarize or review an existing SylixOS port
+- User mentions "移植", "port", "适配", "兼容层", "driver migration", "SDK migration"
+- User wants a reusable skill or checklist for later similar ports
+
+**What it does:**
+- Compares Linux original code with current SylixOS ported code
+- Verifies migration conclusions against active source instead of trusting markdown notes
+- Extracts reusable patterns across driver, HAL, SDK, sample, and build layers
+- Distinguishes verified fixes from candidate-only ideas that are not yet landed
+
+**Location:** `sylixos-driver-porting/SKILL.md`
 
 ## Decision Logic
 
@@ -73,6 +90,15 @@ User says:
 - "上传 xxx 项目"
 
 → Use `sylixos_ftp_upload` skill
+
+### Porting / Migration Analysis
+User says:
+- "把 Linux 驱动移植到 SylixOS"
+- "总结这个移植项目的经验"
+- "分析当前代码里哪些移植结论已经落地"
+- "生成一个后续可复用的 skill"
+
+→ Use `sylixos-driver-porting` skill
 
 ### Build + Upload
 User says:
@@ -148,12 +174,30 @@ Action:
    - Upload to board
 ```
 
+### Example 5: Porting Summary
+
+```
+User: "结合代码和移植文档，总结一个 SylixOS 驱动移植 skill"
+
+Action:
+1. Apply sylixos-driver-porting skill
+2. Compare Linux original tree and SylixOS ported tree
+3. Verify each markdown conclusion against active code
+4. Extract reusable patterns and unresolved risks
+5. Write the skill file
+```
+
 ## Common Project Types
 
 ### Driver Projects
 - Usually contain: `lyn_drv.mk`, `config.mk`, `.reproject`
 - Build output: `*.ko` (kernel modules), `*.so` (libraries)
 - Upload targets: `/lib/modules/drivers/`, `/lib/`
+
+### Ported Driver Stacks
+- Usually contain both Linux-origin source layout and SylixOS-native build files
+- Often include driver layer, HAL wrappers, SDK or middleware, and sample apps
+- Need evidence-based review because markdown migration notes may be stale or wrong
 
 ### Application Projects
 - Usually contain: `config.mk`, `.reproject`, `src/` directory
@@ -180,7 +224,7 @@ Action:
 
 ## Integration Notes
 
-- Both sub-skills are independent and can be used separately
+- These sub-skills are independent and can be used separately
 - Build skill may modify libdrv_linux_compat if needed
 - Upload skill assumes build artifacts exist
 - Always verify build success before uploading
@@ -190,11 +234,11 @@ Action:
 
 | User Intent | Keywords | Sub-Skill(s) |
 |-------------|----------|--------------|
+| Porting | 移植, port, 适配, migration | sylixos-driver-porting |
 | Compile | 编译, build, compile, make | sylixos_cli_build |
 | Upload | 上传, upload, deploy, 部署 | sylixos_ftp_upload |
 | Both | 编译并上传, build and upload | Both in sequence |
 | Fix errors | 修复, fix, 错误, error | sylixos_cli_build |
-| Test on board | 测试, test, 板卡 | sylixos_ftp_upload |
 
 ## Tips
 

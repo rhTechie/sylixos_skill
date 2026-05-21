@@ -13,6 +13,9 @@ This skill automates the process of:
 3. Verifying network connectivity
 4. Uploading files via FTP
 
+If the user also wants runtime verification on the board, hand off to
+`sylixos_telnet_test` after upload succeeds.
+
 ## When to Use
 
 - User says "上传到板卡" / "upload to board"

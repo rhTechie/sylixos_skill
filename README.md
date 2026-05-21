@@ -18,6 +18,7 @@
 ```
 
 AI 会根据你的指令自动判断使用哪个子 skill：
+- **移植分析**: "把 Linux 驱动移植到 SylixOS" / "总结移植经验" → 自动使用移植分析 skill
 - **编译项目**: "编译 xxx 项目" → 自动使用编译 skill
 - **上传到板卡**: "上传 xxx 到板卡" → 自动使用上传 skill
 - **完整流程**: "编译并上传 xxx" → 自动依次执行编译和上传
@@ -28,6 +29,8 @@ AI 会根据你的指令自动判断使用哪个子 skill：
 sylixos_skill/
 ├── SKILL.md                      # 主 skill 入口（统一加载点）
 ├── README.md                     # 本文档
+├── sylixos-driver-porting/
+│   └── SKILL.md                  # Linux 驱动/SDK 向 SylixOS 移植分析 skill
 ├── sylixos_cli_build/
 │   └── SKILL.md                  # 编译构建子 skill
 └── sylixos_ftp_upload/
@@ -64,6 +67,21 @@ SylixOS CLI 命令行构建子 skill。
 - 修复编译错误
 - 重新构建项目
 
+### `sylixos-driver-porting/SKILL.md`
+
+Linux 驱动/SDK 向 SylixOS 迁移分析子 skill。
+
+**功能**:
+- 对照 Linux 原始代码与 SylixOS 移植代码
+- 从实际源码和构建文件中提取已落地的移植模式
+- 区分“代码已验证”和“仅文档猜测”的结论
+- 总结驱动层、HAL 层、SDK 层、sample 层与构建层的迁移要点
+
+**适用场景**:
+- 评审现有 SylixOS 移植质量
+- 为类似驱动后续移植沉淀 checklist 或 skill
+- 排查迁移文档与当前代码不一致的问题
+
 ### `sylixos_ftp_upload/SKILL.md`
 
 SylixOS 项目文件上传到目标板卡子 skill。
@@ -81,6 +99,23 @@ SylixOS 项目文件上传到目标板卡子 skill。
 - 部署库文件（*.so）到 `/lib/`
 - 部署测试工具到 `/apps/`
 
+### `sylixos_telnet_test/SKILL.md`
+
+SylixOS 板卡 Telnet 登录与板端测试子 skill。
+
+**功能**:
+- 从用户输入或 `.reproject` 中提取板卡 IP、工作目录和远端文件路径
+- 验证板卡 `23` 端口可达
+- 通过 telnet 登录板卡
+- 检查上传文件是否存在并修正执行权限
+- 执行板端测试命令并采集输出
+- 汇总真实板端运行结果
+
+**适用场景**:
+- 上传后立即在板卡上运行应用程序
+- 通过 telnet 做板端冒烟测试
+- 将“编译 + 上传 + 运行验证”串成完整闭环
+
 ## 注意事项
 
 1. **编译前提**: 确保 SylixOS 工具链已安装并在 PATH 中
@@ -95,5 +130,3 @@ SylixOS 项目文件上传到目标板卡子 skill。
 - 每个子 skill 独立维护
 - 主 skill 负责路由和协调
 - 可随时添加新的子 skill（如调试、测试等）
-
-
