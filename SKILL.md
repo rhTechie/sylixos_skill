@@ -15,6 +15,8 @@ Use this skill for any SylixOS development task, including:
 - Building/compiling SylixOS projects
 - Uploading files to target boards
 - Running tests on target boards over telnet
+- Designing or debugging single-board dual-port Ethernet self-tests
+- Explaining Linux vs SylixOS networking API differences encountered during debugging
 - Complete development workflow (build + upload + test)
 
 ## Sub-Skills
@@ -88,6 +90,25 @@ This master skill delegates to specialized sub-skills:
 
 **Location:** `sylixos-driver-porting/SKILL.md`
 
+### 5. `sylixos-network` - Networking Debug And Validation
+
+**Trigger conditions:**
+- User mentions "单板双网口自测"
+- User asks for "双网口互测" without an external peer PC
+- User wants to prove physical Ethernet traversal instead of local loopback
+- User asks to summarize Linux and SylixOS network interface differences
+- User is confused by `AF_PACKET`, `sockaddr_ll`, `SO_BINDTODEVICE`, MTU, or loopback behavior
+- User wants a reusable debugging checklist for future AI-assisted network bring-up
+
+**What it does:**
+- Distinguishes application connectivity from physical-path validation
+- Summarizes practical Linux-vs-SylixOS differences in networking APIs and semantics
+- Highlights local-IP short-circuit delivery behavior
+- Explains raw Ethernet constraints, MTU limits, and interface-counter interpretation
+- Provides a reusable debugging checklist for future AI sessions
+
+**Location:** `sylixos-network/SKILL.md`
+
 ## Decision Logic
 
 When the user makes a request, determine which sub-skill(s) to use:
@@ -127,6 +148,18 @@ User says:
 - "生成一个后续可复用的 skill"
 
 → Use `sylixos-driver-porting` skill
+
+### Networking Validation / API Differences
+User says:
+- "做一个单板双网口自测"
+- "不使用外部陪测机验证物理链路"
+- "双口短接后怎么证明不是 lo0"
+- "raw Ethernet 自测怎么做"
+- "总结 Linux 和 SylixOS 网络接口差异"
+- "为什么 AF_PACKET 在 SylixOS 上行为不一样"
+- "整理一个后续 AI 调试网络时可复用的 skill"
+
+→ Use `sylixos-network` skill
 
 ### Build + Upload
 User says:

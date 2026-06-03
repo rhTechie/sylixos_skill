@@ -52,6 +52,15 @@ Do not guess a runtime command for:
 
 In those cases, ask the user for the exact board-side test command.
 
+If `.reproject` does not exist, use an explicit runtime tuple instead:
+
+- board IP
+- remote file path
+- optional board work directory
+- exact board-side command, if not obvious
+
+For ad hoc validation tools, do not block on missing `.reproject`.
+
 ### 2. Verify Connectivity Before Login
 
 Check basic reachability first:
@@ -94,6 +103,9 @@ Important SylixOS note:
 - prefer `chmod 755 <file>`
 - do not assume `chmod +x <file>` is supported
 
+Also prefer checking one file or directory at a time. On some SylixOS shells,
+batched commands are harder to read and easier to desynchronize.
+
 ### 5. Run the Test Command
 
 Use the user-provided command when available.
@@ -110,6 +122,14 @@ Otherwise:
 Send commands one by one and poll output between steps. Do not blast multiple
 commands into the telnet session unless prompt synchronization is already known
 to be reliable.
+
+If telnet interaction looks desynchronized:
+
+- send a single command
+- wait for output and prompt
+- then send the next command
+
+Do not trust a long pasted command sequence on first login.
 
 ### 6. Capture and Evaluate Result
 
@@ -142,6 +162,8 @@ Always report:
 - FTP-uploaded application files may land without execute permission
 - octal `chmod` is more portable on SylixOS shells than symbolic `+x`
 - local `file` output is only a hint; actual board execution result is the real validation
+- for hardware-facing tests, capture pre/post board state when relevant
+  for example `ifconfig`, driver status, or device-node presence
 
 ## Error Handling
 
@@ -164,6 +186,9 @@ Always report:
 
 If `.reproject` uploads multiple files and the runnable entry point is not
 obvious, ask the user for the exact command instead of guessing.
+
+If `.reproject` is missing and the remote path is explicit, that is not
+ambiguous by itself. Execute the explicit file path after permission checks.
 
 ## Integration Order
 

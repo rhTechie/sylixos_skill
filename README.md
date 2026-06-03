@@ -22,6 +22,7 @@ AI 会根据你的指令自动判断使用哪个子 skill：
 - **编译项目**: "编译 xxx 项目" → 自动使用编译 skill
 - **上传到板卡**: "上传 xxx 到板卡" → 自动使用上传 skill
 - **板卡测试**: "telnet 登录板卡并测试 xxx" → 自动使用 telnet 测试 skill
+- **网络验证与接口差异**: "不使用陪测机做双网口物理链路自测" / "总结 Linux 和 SylixOS 的网络接口差异" → 自动使用网络 skill
 - **完整流程**: "编译上传并测试 xxx" → 自动依次执行编译、上传和板卡测试
 
 ## 目录结构
@@ -32,6 +33,8 @@ sylixos_skill/
 ├── README.md                     # 本文档
 ├── sylixos-driver-porting/
 │   └── SKILL.md                  # Linux 驱动/SDK 向 SylixOS 移植分析 skill
+├── sylixos-network/
+│   └── SKILL.md                  # SylixOS 网络验证与接口差异 skill
 ├── sylixos_cli_build/
 │   └── SKILL.md                  # 编译构建子 skill
 ├── sylixos_telnet_test/
@@ -84,6 +87,22 @@ Linux 驱动/SDK 向 SylixOS 迁移分析子 skill。
 - 评审现有 SylixOS 移植质量
 - 为类似驱动后续移植沉淀 checklist 或 skill
 - 排查迁移文档与当前代码不一致的问题
+
+### `sylixos-network/SKILL.md`
+
+SylixOS 网络验证与接口差异子 skill。
+
+**功能**:
+- 帮助 AI 区分“本机地址通信成功”和“物理链路验证成功”
+- 沉淀 Linux 与 SylixOS 在网络接口、`AF_PACKET`、MTU、计数解释方面的差异
+- 指导在无外部陪测机时如何选择 local-IP、raw L2 或 PHY 级验证
+- 为后续网络 bring-up / 物理路径验证 / 网络调试提供统一检查清单
+
+**适用场景**:
+- 单板双网口物理路径验证
+- Linux 网络代码迁移到 SylixOS
+- 排查“为什么 ping/UDP 成功但不一定过物理链路”
+- 为后续 AI 会话快速建立可复用的网络调试上下文
 
 ### `sylixos_ftp_upload/SKILL.md`
 

@@ -29,6 +29,19 @@ If the user also wants runtime verification on the board, hand off to
 - Target board must be network accessible
 - FTP service must be running on the target board
 
+If `.reproject` does not exist, do not stop immediately. Fall back to an
+explicit deploy tuple:
+
+- board IP
+- local artifact path(s)
+- remote destination path
+
+This fallback is important for:
+
+- ad hoc test applications
+- newly created throwaway utilities
+- single-file validation tools created during debugging
+
 ## Workflow
 
 ### 1. Locate and Parse .reproject File
@@ -81,6 +94,24 @@ for pair in root.findall('.//UploadPath/PairItem'):
 
 **Important**: The `key` attribute contains workspace variables like `$(WORKSPACE_projectname)` that must be replaced with the actual absolute path to the project directory.
 
+### 1a. Fallback When `.reproject` Is Missing
+
+If the project has no `.reproject`, use this generic fallback instead of
+blocking:
+
+1. Ask for or infer the board IP from the user request.
+2. Ask for or choose an explicit remote destination directory.
+3. Upload the built artifact directly by absolute path.
+
+Recommended default behavior:
+
+- prefer a user-provided remote directory
+- otherwise reuse the directory the user already uses on that board
+- otherwise choose a simple writable app path such as `/media/sdcard5/` or
+  `/apps/<toolname>/` depending on the board workflow
+
+Do not invent a `.reproject` just to satisfy the upload flow.
+
 ### 3. Verify Network Connectivity
 
 Before uploading, verify the board is reachable:
@@ -90,6 +121,14 @@ ping -c 3 <board_ip>
 ```
 
 If ping fails, report the error to the user and do not proceed.
+
+Also verify FTP service explicitly:
+
+```bash
+nc -vz -w 3 <board_ip> 21
+```
+
+If port `21` is closed, stop and report FTP unavailable.
 
 ### 4. Get FTP Credentials
 
@@ -157,6 +196,14 @@ for src, dst in upload_paths:
 ftp.quit()
 ```
 
+When debugging board-side runtime issues, consider uploading both:
+
+- stripped binary for normal execution
+- unstripped binary with a distinct suffix for later investigation
+
+This is especially useful for small test applications where the size overhead is
+acceptable.
+
 ### 6. Report Results
 
 After upload completes, report to the user:
@@ -188,6 +235,11 @@ Example output:
 ### File Errors
 - If source file doesn't exist: Skip and report in summary
 - If FTP upload fails: Catch exception, report which file failed, continue with remaining files
+
+If `.reproject` is absent and the user gave only a local binary path:
+
+- upload that one file directly
+- do not fail merely because project metadata is missing
 
 ### Permission Errors
 - If FTP credentials are wrong: Report "FTP 认证失败，请检查用户名和密码"
