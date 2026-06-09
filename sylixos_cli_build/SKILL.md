@@ -93,8 +93,8 @@ FPU_TYPE=default
 ## Config Update Strategy
 
 Preferred outcome: modify each companion project `config.mk` so the project can be
-built later with plain `make` from its own directory plus the required
-`-f "$MULTI_MK"` entry, without extra command-line variable overrides.
+built later from its own directory with `make ... -f "$MULTI_MK"` and without
+extra command-line variable overrides.
 
 All path variables must be absolute paths.
 
@@ -156,6 +156,41 @@ make -n all -f "$MULTI_MK"
 
 Expected result: the recursive command should expand to the chosen `PLATFORM_NAME`, plus the toolchain, CPU type, and FPU type derived from `platforms.mk`.
 
+## Local Makefile Behavior
+
+Do not assume a companion project's local `Makefile` is a safe top-level entry
+for plain `make` or `make clean`.
+
+Verified SylixOS behavior:
+
+- The outer multi-platform `all` and `clean` targets come from
+  `libsylixos/SylixOS/mktemp/multi-platform.mk`.
+- `multi-platform.mk` recurses with `PLATFORM_NAME=$(platform)`.
+- The inner per-platform cleanup comes from
+  `libsylixos/SylixOS/mktemp/end.mk`, which removes `$(TARGETS)`,
+  `$(OBJPATH)`, and `$(DEPPATH)`.
+- The real output root comes from `header.mk` as
+  `build/$(PLATFORM_NAME)/$(Debug|Release)`.
+
+Implication:
+
+- If `PLATFORM_NAME` is empty, a local `Makefile` that directly includes
+  `header.mk` and `end.mk` will usually resolve paths like `build//Release/...`.
+- In that state, plain `make clean` may run, but it can clean the wrong path and
+  leave `build/<PLATFORM>/Release/...` untouched.
+
+Rule:
+
+- Prefer `make all -f "$MULTI_MK"` and `make clean -f "$MULTI_MK"` for companion
+  projects.
+- Do not tell the user that plain `make clean` is correct unless the local
+  `Makefile` explicitly delegates `all` and `clean` to `multi-platform.mk` when
+  `PLATFORM_NAME` is empty.
+- If you generate a standalone companion project for direct CLI use, either:
+  1. document `make ... -f "$MULTI_MK"` as the required entry, or
+  2. add a local wrapper `Makefile` target that forwards plain `make` and
+     `make clean` into `multi-platform.mk`.
+
 ## Build Order
 
 Build dependencies before BSP:
@@ -203,14 +238,24 @@ Do not pass relative paths in command-line overrides.
 
 ## Validation
 
-After editing `config.mk`, verify that plain `make` works from each project
-directory without extra variable parameters, keeping only the required
+After editing `config.mk`, verify that the platform-aware entry works from each
+project directory without extra variable parameters beyond the required
 `-f "$MULTI_MK"` build entry:
 
 ```sh
 make -C "$LICENSE" all -f "$MULTI_MK"
+make -C "$LICENSE" clean -f "$MULTI_MK"
 make -C "$COMPAT" all -f "$MULTI_MK"
+make -C "$COMPAT" clean -f "$MULTI_MK"
 make -C "$BSP" all -f "$MULTI_MK"
+make -C "$BSP" clean -f "$MULTI_MK"
+```
+
+If you intentionally added a local wrapper `Makefile`, also verify:
+
+```sh
+make -C "$LICENSE" -n all
+make -C "$LICENSE" -n clean
 ```
 
 Confirm output directories match the chosen platform:
@@ -232,6 +277,8 @@ Typical successful outputs include:
 - `config.mk` still contains `$(WORKSPACE_...)`: replace it with absolute paths.
 - `config.mk` uses relative paths: replace them with absolute paths.
 - Command-line overrides use relative paths: replace them with absolute paths.
+- Plain `make clean` left `build/<PLATFORM>/Release` behind: rerun through
+  `make clean -f "$MULTI_MK"` or add a local wrapper `Makefile`.
 - `PLATFORMS` does not match the real base layout: inspect `platforms.mk` and `libsylixos/build`.
 - BSP cannot find compatibility layer or license SDK outputs: check absolute dependency paths and build order.
 - `aarch64-sylixos-elf-gcc` not found: ensure the SylixOS toolchain is in `PATH`.

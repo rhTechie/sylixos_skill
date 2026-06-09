@@ -66,6 +66,7 @@ SylixOS CLI 命令行构建子 skill。
 - 更新 config.mk 配置文件（使用绝对路径）
 - 确定正确的平台配置（ARM64_GENERIC 等）
 - 执行 multi-platform.mk 构建
+- 约束 companion project 通过 `multi-platform.mk` 做平台感知的 `all/clean`
 - 处理编译错误和依赖问题
 
 **适用场景**:
@@ -163,6 +164,8 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 4. **Telnet 服务**: 板卡测试前确保 `23` 端口可访问
 5. **文件权限**: 上传的可执行文件可能需要在板卡上设置执行权限，优先使用 `chmod 755`
 6. **路径规范**: config.mk 中必须使用绝对路径，不能使用相对路径
+7. **构建入口**: companion project 优先使用 `make all|clean -f "$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"`；未做 wrapper 的本地 `Makefile` 直接执行 `make clean` 可能只清掉 `build//Release`，不会清掉真实的 `build/<PLATFORM>/Release`
+8. **输出目录**: 标准输出目录是 `build/<PLATFORM>/Debug/` 或 `build/<PLATFORM>/Release/`，例如 `build/ARM64_GENERIC/Release/`
 
 ## 扩展说明
 
