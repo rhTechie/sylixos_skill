@@ -42,22 +42,34 @@ This fallback is important for:
 - newly created throwaway utilities
 - single-file validation tools created during debugging
 
+But when the task is to create or scaffold a new long-lived SylixOS project,
+generate a matching `.reproject` at project creation time instead of leaving the
+project without upload metadata.
+
 ## Workflow
 
 ### 1. Locate and Parse .reproject File
 
 The `.reproject` file is an XML configuration file (GB2312 encoding) that contains:
 - `DeviceSetting/@DevName`: Target board IP address
+- `DeviceSetting/@WorkDir`: default board-side working directory
 - `UploadPath/PairItem`: List of files to upload with source and destination paths
+- `OutputSetting`: mapping for `$(Output)`, `Debug`, and `Release`
 
 Example structure:
 ```xml
 <SylixOSSetting>
+    <OutputSetting>
+        <OutputPath Name="Output" Path="Release:Debug" TreeNode="Output"/>
+        <OutputPath Name="Debug" Path="Debug" TreeNode="Debug"/>
+        <OutputPath Name="Release" Path="Release" TreeNode="Release"/>
+    </OutputSetting>
     <UploadPath>
-        <PairItem key="$(WORKSPACE_project)/build/ARM64_GENERIC/Release/file.ko" 
-                  value="/lib/modules/drivers/file.ko"/>
+        <PairItem key="$(WORKSPACE_project)/$(Output)/strip/project_name"
+                  value="/apps/project_name/project_name"/>
     </UploadPath>
-    <DeviceSetting DevName="10.13.21.42" Platform="ARM64_GENERIC"/>
+    <DeviceSetting Auto="false" DevName="10.13.21.42" Platform="ARM64_GENERIC"
+                   WorkDir="/apps/project_name"/>
 </SylixOSSetting>
 ```
 
@@ -78,6 +90,13 @@ root = ET.fromstring(content)
 # Get board IP
 device_setting = root.find('.//DeviceSetting')
 board_ip = device_setting.get('DevName')
+work_dir = device_setting.get('WorkDir', '')
+
+# Resolve output aliases used by RealEvo-style app projects
+debug_level = 'release'
+output_alias = 'Release'
+if debug_level == 'debug':
+    output_alias = 'Debug'
 
 # Get upload paths
 upload_paths = []
@@ -88,11 +107,77 @@ for pair in root.findall('.//UploadPath/PairItem'):
     # Replace workspace variable with actual path
     # Pattern: $(WORKSPACE_projectname) -> /actual/path/to/project
     src = src.replace('$(WORKSPACE_projectname)', '/actual/project/path')
+    src = src.replace('$(Output)', f'build/ARM64_GENERIC/{output_alias}')
     
     upload_paths.append((src, dst))
 ```
 
-**Important**: The `key` attribute contains workspace variables like `$(WORKSPACE_projectname)` that must be replaced with the actual absolute path to the project directory.
+**Important**:
+
+- The `key` attribute commonly contains workspace variables like
+  `$(WORKSPACE_projectname)` that must be replaced with the actual absolute path
+  to the project directory.
+- For app projects, `$(Output)` is usually a logical alias that must be resolved
+  to the real build path such as `build/ARM64_GENERIC/Release` or
+  `build/ARM64_GENERIC/Debug`.
+
+### 1b. Generate `.reproject` For New Projects
+
+When creating a new project intended for repeated board upload and testing, do
+not leave `.reproject` absent. Generate one immediately.
+
+For a standalone application project, use this template shape:
+
+```xml
+<?xml version="1.0" encoding="GB2312" standalone="no"?>
+<SylixOSSetting>
+    <BaseSetting Profile="standard" ProjectType="SylixOSAppProject"
+                 RealEvoVer="6.5.0 Ultimate"
+                 TlsVersion="SylixOS_COM_LTS_3.6.5"/>
+    <OutputSetting>
+        <OutputPath Name="Output" Path="Release:Debug" TreeNode="Output"/>
+        <OutputPath Name="Debug" Path="Debug" TreeNode="Debug"/>
+        <OutputPath Name="Release" Path="Release" TreeNode="Release"/>
+    </OutputSetting>
+    <BuildSetting CoustomCfgMakefile="false"
+                  NeedReBuild="false"
+                  NotScanSourceFile="false"/>
+    <DeviceSetting Auto="false"
+                   DevName="10.13.21.42"
+                   Platform="ARM64_GENERIC"
+                   WorkDir="/apps/<project_name>"/>
+    <UploadPath>
+        <PairItem key="$(WORKSPACE_<project_name>)/$(Output)/strip/<project_name>"
+                  value="/apps/<project_name>/<project_name>"/>
+    </UploadPath>
+    <ExtDevNames/>
+</SylixOSSetting>
+```
+
+Template rules:
+
+- `ProjectType`:
+  `SylixOSAppProject` for executables, `SylixOSSlibProject` for libraries, BSP
+  project type for BSPs.
+- `DeviceSetting/@DevName`:
+  reuse the board IP already used in the workspace when one is obvious;
+  otherwise leave the agreed default board IP.
+- `DeviceSetting/@Platform`:
+  set it when the workspace platform is known, for example `ARM64_GENERIC`.
+- `DeviceSetting/@WorkDir`:
+  for single executable apps, prefer `/apps/<project_name>`.
+- `UploadPath/PairItem/@key`:
+  for single app executables, prefer
+  `$(WORKSPACE_<project_name>)/$(Output)/strip/<project_name>`.
+- `UploadPath/PairItem/@value`:
+  for single app executables, prefer `/apps/<project_name>/<project_name>`.
+- `OutputSetting`:
+  keep the standard `Output/Debug/Release` trio so IDE and upload tooling stay
+  consistent.
+
+If the project is a one-off throwaway validation utility, fallback upload
+without `.reproject` is still acceptable, but that is the exception, not the
+preferred project shape.
 
 ### 1a. Fallback When `.reproject` Is Missing
 
@@ -110,7 +195,9 @@ Recommended default behavior:
 - otherwise choose a simple writable app path such as `/media/sdcard5/` or
   `/apps/<toolname>/` depending on the board workflow
 
-Do not invent a `.reproject` just to satisfy the upload flow.
+Do not invent a fake `.reproject` for an already existing throwaway binary when
+the user only wants one immediate upload. Generate `.reproject` when creating or
+formalizing a reusable project.
 
 ### 3. Verify Network Connectivity
 
@@ -288,6 +375,20 @@ def parse_reproject(project_path):
     # Get board IP
     device_setting = root.find('.//DeviceSetting')
     board_ip = device_setting.get('DevName')
+    work_dir = device_setting.get('WorkDir')
+    platform = device_setting.get('Platform') or 'ARM64_GENERIC'
+    
+    debug_level = 'release'
+    config_mk = os.path.join(project_path, 'config.mk')
+    if os.path.exists(config_mk):
+        with open(config_mk, 'r', encoding='utf-8', errors='ignore') as f:
+            config_text = f.read().lower()
+        if 'debug_level := debug' in config_text or 'debug_level = debug' in config_text:
+            debug_level = 'debug'
+    
+    output_alias = f'build/{platform}/Release'
+    if debug_level == 'debug':
+        output_alias = f'build/{platform}/Debug'
     
     # Get project name from path
     project_name = os.path.basename(project_path)
@@ -300,11 +401,12 @@ def parse_reproject(project_path):
         
         # Replace workspace variable
         src = src.replace(f'$(WORKSPACE_{project_name})', project_path)
+        src = src.replace('$(Output)', output_alias)
         
         if os.path.exists(src):
             upload_paths.append((src, dst))
     
-    return board_ip, upload_paths
+    return board_ip, work_dir, upload_paths
 
 def upload_to_board(board_ip, upload_paths, username='root', password='root'):
     """Upload files to board via FTP"""
@@ -347,7 +449,7 @@ def upload_to_board(board_ip, upload_paths, username='root', password='root'):
 # Usage
 if __name__ == '__main__':
     project_path = '/path/to/project'
-    board_ip, upload_paths = parse_reproject(project_path)
+    board_ip, work_dir, upload_paths = parse_reproject(project_path)
     success, failed = upload_to_board(board_ip, upload_paths)
     print(f"Success: {success}, Failed: {failed}")
 ```
@@ -361,6 +463,8 @@ if __name__ == '__main__':
 5. **Report progress** - Show which file is being uploaded for better user experience
 6. **Use binary mode** - Always use `storbinary()` for uploading files
 7. **Handle both files and directories** - Some upload items are directories containing multiple files
+8. **Resolve `$(Output)` correctly** - It usually maps to `build/<PLATFORM>/Release` or `build/<PLATFORM>/Debug`
+9. **Create `.reproject` for new reusable projects** - Especially standalone app test tools that will be rebuilt and re-uploaded later
 8. **Timeout settings** - Set reasonable timeout (10s) for FTP connections
 9. **Error recovery** - If one file fails, continue with remaining files
 

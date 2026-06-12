@@ -15,6 +15,7 @@ Use this skill for any SylixOS development task, including:
 - Building/compiling SylixOS projects
 - Uploading files to target boards
 - Running tests on target boards over telnet
+- Debugging long-running board-side issues with staged short-run, A/B, and soak validation
 - Designing or debugging single-board dual-port Ethernet self-tests
 - Explaining Linux vs SylixOS networking API differences encountered during debugging
 - Complete development workflow (build + upload + test)
@@ -109,6 +110,22 @@ This master skill delegates to specialized sub-skills:
 
 **Location:** `sylixos-network/SKILL.md`
 
+### 6. `sylixos-long-run-validation` - Long-Run Board Validation Method
+
+**Trigger conditions:**
+- User mentions “长时间测试”, “长期测试”, “soak”, “endurance”, “稳定性验证”
+- User wants staged short-run then long-run verification
+- User wants A/B validation before claiming an optimization
+- User is debugging jitter/latency/load issues that need 30-minute or 1-hour confirmation
+
+**What it does:**
+- Separates test-model effects from real path effects
+- Uses a staged ladder: quick reproduction -> A/B isolation -> 30-minute validation -> 1-hour confirmation
+- Forces regression under the default real pressure mix before accepting a fix
+- Emphasizes CPU placement, IRQ placement, and harness reliability as first-class hypotheses
+
+**Location:** `sylixos-long-run-validation/SKILL.md`
+
 ## Decision Logic
 
 When the user makes a request, determine which sub-skill(s) to use:
@@ -160,6 +177,15 @@ User says:
 - "整理一个后续 AI 调试网络时可复用的 skill"
 
 → Use `sylixos-network` skill
+
+### Long-Run Validation / Soak Debugging
+User says:
+- "做长期测试问题排查"
+- "先短测再长测验证"
+- "做 30 分钟或 1 小时确认"
+- "这类抖动问题怎么系统验证"
+
+→ Use `sylixos-long-run-validation` skill
 
 ### Build + Upload
 User says:
@@ -298,6 +324,9 @@ Action:
 - Usually contain: `config.mk`, `.reproject`, `src/` directory
 - Build output: executables, `*.so` libraries
 - Upload targets: `/apps/`, `/usr/bin/`
+- For newly created reusable app projects, create `.reproject` together with the
+  build files so later FTP upload and telnet validation can reuse stable board
+  metadata
 
 ### BSP Projects
 - Usually contain: `SylixOS/` directory, `config.mk`
@@ -329,6 +358,8 @@ Action:
 - These sub-skills are independent and can be used separately
 - Build skill may modify libdrv_linux_compat if needed
 - Upload skill assumes build artifacts exist
+- For newly scaffolded reusable projects, prefer generating `.reproject` during
+  creation instead of relying on ad hoc upload arguments forever
 - Test skill assumes the artifact is already on the board
 - Always verify build success before uploading
 - Always verify upload success before telnet testing

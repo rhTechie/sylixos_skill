@@ -23,6 +23,7 @@ AI 会根据你的指令自动判断使用哪个子 skill：
 - **上传到板卡**: "上传 xxx 到板卡" → 自动使用上传 skill
 - **板卡测试**: "telnet 登录板卡并测试 xxx" → 自动使用 telnet 测试 skill
 - **网络验证与接口差异**: "不使用陪测机做双网口物理链路自测" / "总结 Linux 和 SylixOS 的网络接口差异" → 自动使用网络 skill
+- **长期验证方法**: "先短测再长测验证" / "做 30 分钟或 1 小时 soak 验证" → 自动使用长期验证 skill
 - **完整流程**: "编译上传并测试 xxx" → 自动依次执行编译、上传和板卡测试
 
 ## 目录结构
@@ -35,6 +36,8 @@ sylixos_skill/
 │   └── SKILL.md                  # Linux 驱动/SDK 向 SylixOS 移植分析 skill
 ├── sylixos-network/
 │   └── SKILL.md                  # SylixOS 网络验证与接口差异 skill
+├── sylixos-long-run-validation/
+│   └── SKILL.md                  # 长时间测试 / soak / staged validation 方法 skill
 ├── sylixos_cli_build/
 │   └── SKILL.md                  # 编译构建子 skill
 ├── sylixos_telnet_test/
@@ -105,6 +108,22 @@ SylixOS 网络验证与接口差异子 skill。
 - 排查“为什么 ping/UDP 成功但不一定过物理链路”
 - 为后续 AI 会话快速建立可复用的网络调试上下文
 
+### `sylixos-long-run-validation/SKILL.md`
+
+长期测试 / soak / staged validation 方法子 skill。
+
+**功能**:
+- 总结长期板卡问题的通用验证方法，而不是单次问题结论
+- 约束问题排查顺序为：短测复现 → 单变量 A/B → 30 分钟验证 → 1 小时确认
+- 强制在自定义压力模型后回到默认真实压力混合场景复测
+- 强调 CPU 放置、IRQ 放置、压力线程放置、结果文件化、脚本化执行、会话噪声规避等方法
+- 强调多轮重大验证前优先 reboot，避免上轮环境污染结果
+
+**适用场景**:
+- 长时间抖动、超时、耐久、soak、endurance、压力敏感问题
+- “短测看起来好了，但需要 30 分钟 / 1 小时确认”的问题
+- 板卡侧需要多轮假设验证和长期确认的问题
+
 ### `sylixos_ftp_upload/SKILL.md`
 
 SylixOS 项目文件上传到目标板卡子 skill。
@@ -115,6 +134,7 @@ SylixOS 项目文件上传到目标板卡子 skill。
 - 验证网络连通性
 - 通过 FTP 上传文件（默认 root/root）
 - 自动创建目标目录
+- 为新建的可复用 SylixOS 工程沉淀 `.reproject` 模板
 - 报告上传结果
 
 **适用场景**:
@@ -166,6 +186,9 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 6. **路径规范**: config.mk 中必须使用绝对路径，不能使用相对路径
 7. **构建入口**: companion project 优先使用 `make all|clean -f "$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"`；未做 wrapper 的本地 `Makefile` 直接执行 `make clean` 可能只清掉 `build//Release`，不会清掉真实的 `build/<PLATFORM>/Release`
 8. **输出目录**: 标准输出目录是 `build/<PLATFORM>/Debug/` 或 `build/<PLATFORM>/Release/`，例如 `build/ARM64_GENERIC/Release/`
+9. **新建工程元数据**: 对于后续会反复上传和板测的 SylixOS 新工程，创建时就应生成 `.reproject`，至少包含 `DeviceSetting`、`OutputSetting` 和一个正确的 `UploadPath`
+10. **长期测试轮次**: 对于长时间板卡验证问题，重大策略变更、绑核变更或核心二进制变更前优先 reboot，再进入下一轮验证
+11. **仓库维护约束**: 每次新增或创建 skill 文件时，同步更新 `README.md`，确保人类读仓库时能看到新 skill 的用途和位置
 
 ## 扩展说明
 
