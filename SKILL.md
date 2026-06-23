@@ -52,7 +52,9 @@ This master skill delegates to specialized sub-skills:
 - Parses .reproject configuration file
 - Extracts board IP and upload file list
 - Verifies network connectivity
-- Uploads files via FTP (default: root/root)
+- Uploads files via the bundled FTP script (default: root/root)
+- Applies remote `chmod 755` to uploaded files by default
+- Runs one final remote `sync` after upload
 - Reports upload results
 
 **Location:** `sylixos_ftp_upload/SKILL.md`
@@ -345,6 +347,7 @@ Action:
 - FTP connection failed: Verify FTP service is running
 - Permission denied: Check FTP credentials
 - File not found: Ensure build completed successfully
+- Remote chmod/sync failed: Treat upload as incomplete until board-side state is confirmed
 
 ### Test Errors
 - Telnet port closed: Verify board telnet service is enabled
@@ -360,6 +363,9 @@ Action:
 - Upload skill assumes build artifacts exist
 - For newly scaffolded reusable projects, prefer generating `.reproject` during
   creation instead of relying on ad hoc upload arguments forever
+- Upload skill now prefers `sylixos_ftp_upload/scripts/ftp_sylixos_upload.py`
+  so path resolution, remote `chmod 755`, and final `sync` are handled
+  consistently
 - Test skill assumes the artifact is already on the board
 - Always verify build success before uploading
 - Always verify upload success before telnet testing

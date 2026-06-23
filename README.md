@@ -132,8 +132,10 @@ SylixOS 项目文件上传到目标板卡子 skill。
 - 解析 `.reproject` 配置文件（GB2312 编码）
 - 提取板卡 IP、上传文件列表和目标路径
 - 验证网络连通性
-- 通过 FTP 上传文件（默认 root/root）
+- 默认通过 bundled FTP 脚本上传文件（默认 root/root）
 - 自动创建目标目录
+- 上传后默认执行远端 `chmod 755`
+- 全部上传完成后默认执行一次远端 `sync`
 - 为新建的可复用 SylixOS 工程沉淀 `.reproject` 模板
 - 报告上传结果
 
@@ -182,7 +184,7 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 2. **网络要求**: 上传前确保能 ping 通板卡 IP
 3. **FTP 服务**: 板卡上必须运行 FTP 服务
 4. **Telnet 服务**: 板卡测试前确保 `23` 端口可访问
-5. **文件权限**: 上传的可执行文件可能需要在板卡上设置执行权限，优先使用 `chmod 755`
+5. **文件权限**: FTP 上传子 skill 现已默认在上传后执行远端 `chmod 755`，不要省略该步骤
 6. **路径规范**: config.mk 中必须使用绝对路径，不能使用相对路径
 7. **构建入口**: companion project 优先使用 `make all|clean -f "$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"`；未做 wrapper 的本地 `Makefile` 直接执行 `make clean` 可能只清掉 `build//Release`，不会清掉真实的 `build/<PLATFORM>/Release`
 8. **输出目录**: 标准输出目录是 `build/<PLATFORM>/Debug/` 或 `build/<PLATFORM>/Release/`，例如 `build/ARM64_GENERIC/Release/`
@@ -196,4 +198,5 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 - 每个子 skill 独立维护
 - 主 skill 负责路由和协调
 - 完整链路推荐顺序为：编译 → 上传 → telnet 测试
+- FTP 上传默认入口为 `sylixos_ftp_upload/scripts/ftp_sylixos_upload.py`，统一处理路径解析、权限修正和最终 `sync`
 - 可随时添加新的子 skill（如调试、专项验证等）

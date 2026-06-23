@@ -1,476 +1,166 @@
 ---
 name: sylixos_ftp_upload
-description: Use when uploading SylixOS project files to target board via FTP. Automatically parses .reproject configuration file to get board IP, upload file list and target paths, then uploads all files via FTP.
+description: Use when uploading SylixOS project files, apps, drivers, libraries, or rootfs content to a target board via FTP. Resolve board IP and upload targets from .reproject when available, otherwise accept explicit local and remote paths. Prefer the bundled ftp_sylixos_upload.py script so upload, remote chmod 755, and final sync are handled consistently.
 ---
 
 # SylixOS FTP Upload
 
-Use this skill when the user asks to upload a SylixOS project to a target board or device.
+Use this skill when the user asks to upload or deploy SylixOS artifacts to a
+board.
 
-This skill automates the process of:
-1. Parsing the `.reproject` configuration file
-2. Extracting board IP, file list, and target paths
-3. Verifying network connectivity
-4. Uploading files via FTP
-
-If the user also wants runtime verification on the board, hand off to
+If the user also wants board-side runtime verification, hand off to
 `sylixos_telnet_test` after upload succeeds.
 
-## When to Use
+## Use The Bundled Script
 
-- User says "上传到板卡" / "upload to board"
-- User mentions uploading a specific project (e.g., "上传 lynxi_driver_hm100")
-- User asks to deploy files to the target device
-- After successful compilation, if user wants to test on hardware
+Default to the bundled script instead of rewriting FTP logic inline:
 
-## Prerequisites
+- Script: `sylixos_ftp_upload/scripts/ftp_sylixos_upload.py`
+- Purpose:
+  parse `.reproject`, resolve upload paths, upload files, apply remote
+  `chmod 755`, and run one final remote `sync`
 
-- Project must have a `.reproject` file in its root directory
-- Target board must be network accessible
-- FTP service must be running on the target board
+Use ad hoc Python only when you are patching or debugging the script itself.
 
-If `.reproject` does not exist, do not stop immediately. Fall back to an
-explicit deploy tuple:
+## Required Inputs
+
+Prefer `.reproject`-driven upload when the project has metadata.
+
+Read from `.reproject`:
+
+- `DeviceSetting/@DevName`: board IP
+- `DeviceSetting/@WorkDir`: default board working directory
+- `UploadPath/PairItem`: upload source and destination pairs
+- `OutputSetting`: output alias mapping used by RealEvo-style projects
+
+If `.reproject` is absent, fall back to an explicit deploy tuple:
 
 - board IP
-- local artifact path(s)
+- local artifact path or directory
 - remote destination path
 
-This fallback is important for:
+Do not block on missing `.reproject` for one-off validation binaries.
+When creating a new reusable SylixOS project, generate `.reproject` at project
+creation time instead of normalizing permanent ad hoc upload flows.
 
-- ad hoc test applications
-- newly created throwaway utilities
-- single-file validation tools created during debugging
+## Default Behavior
 
-But when the task is to create or scaffold a new long-lived SylixOS project,
-generate a matching `.reproject` at project creation time instead of leaving the
-project without upload metadata.
+Before upload:
 
-## Workflow
+- verify the board is reachable with `ping -c 3 <board_ip>`
+- verify FTP is reachable with `nc -vz -w 3 <board_ip> 21`
 
-### 1. Locate and Parse .reproject File
+Credentials:
 
-The `.reproject` file is an XML configuration file (GB2312 encoding) that contains:
-- `DeviceSetting/@DevName`: Target board IP address
-- `DeviceSetting/@WorkDir`: default board-side working directory
-- `UploadPath/PairItem`: List of files to upload with source and destination paths
-- `OutputSetting`: mapping for `$(Output)`, `Debug`, and `Release`
+- default username: `root`
+- default password: `root`
+- override them if the user provides other credentials
 
-Example structure:
-```xml
-<SylixOSSetting>
-    <OutputSetting>
-        <OutputPath Name="Output" Path="Release:Debug" TreeNode="Output"/>
-        <OutputPath Name="Debug" Path="Debug" TreeNode="Debug"/>
-        <OutputPath Name="Release" Path="Release" TreeNode="Release"/>
-    </OutputSetting>
-    <UploadPath>
-        <PairItem key="$(WORKSPACE_project)/$(Output)/strip/project_name"
-                  value="/apps/project_name/project_name"/>
-    </UploadPath>
-    <DeviceSetting Auto="false" DevName="10.13.21.42" Platform="ARM64_GENERIC"
-                   WorkDir="/apps/project_name"/>
-</SylixOSSetting>
-```
+Permission handling:
 
-### 2. Parse Configuration
+- after every uploaded file, set remote permission to `755` by default
+- apply the same default permission to newly created remote directories when the
+  script creates them
+- after all uploads finish, execute one remote `sync`
 
-Use Python to parse the XML file:
+Do not silently skip the permission step. This fixes the known issue where
+uploaded files arrive without execute permission.
 
-```python
-import xml.etree.ElementTree as ET
-import os
+## Command Patterns
 
-# Read with GB2312 encoding
-with open('.reproject', 'r', encoding='gb2312') as f:
-    content = f.read()
+Use the script from the workspace root or by absolute path.
 
-root = ET.fromstring(content)
-
-# Get board IP
-device_setting = root.find('.//DeviceSetting')
-board_ip = device_setting.get('DevName')
-work_dir = device_setting.get('WorkDir', '')
-
-# Resolve output aliases used by RealEvo-style app projects
-debug_level = 'release'
-output_alias = 'Release'
-if debug_level == 'debug':
-    output_alias = 'Debug'
-
-# Get upload paths
-upload_paths = []
-for pair in root.findall('.//UploadPath/PairItem'):
-    src = pair.get('key')
-    dst = pair.get('value')
-    
-    # Replace workspace variable with actual path
-    # Pattern: $(WORKSPACE_projectname) -> /actual/path/to/project
-    src = src.replace('$(WORKSPACE_projectname)', '/actual/project/path')
-    src = src.replace('$(Output)', f'build/ARM64_GENERIC/{output_alias}')
-    
-    upload_paths.append((src, dst))
-```
-
-**Important**:
-
-- The `key` attribute commonly contains workspace variables like
-  `$(WORKSPACE_projectname)` that must be replaced with the actual absolute path
-  to the project directory.
-- For app projects, `$(Output)` is usually a logical alias that must be resolved
-  to the real build path such as `build/ARM64_GENERIC/Release` or
-  `build/ARM64_GENERIC/Debug`.
-
-### 1b. Generate `.reproject` For New Projects
-
-When creating a new project intended for repeated board upload and testing, do
-not leave `.reproject` absent. Generate one immediately.
-
-For a standalone application project, use this template shape:
-
-```xml
-<?xml version="1.0" encoding="GB2312" standalone="no"?>
-<SylixOSSetting>
-    <BaseSetting Profile="standard" ProjectType="SylixOSAppProject"
-                 RealEvoVer="6.5.0 Ultimate"
-                 TlsVersion="SylixOS_COM_LTS_3.6.5"/>
-    <OutputSetting>
-        <OutputPath Name="Output" Path="Release:Debug" TreeNode="Output"/>
-        <OutputPath Name="Debug" Path="Debug" TreeNode="Debug"/>
-        <OutputPath Name="Release" Path="Release" TreeNode="Release"/>
-    </OutputSetting>
-    <BuildSetting CoustomCfgMakefile="false"
-                  NeedReBuild="false"
-                  NotScanSourceFile="false"/>
-    <DeviceSetting Auto="false"
-                   DevName="10.13.21.42"
-                   Platform="ARM64_GENERIC"
-                   WorkDir="/apps/<project_name>"/>
-    <UploadPath>
-        <PairItem key="$(WORKSPACE_<project_name>)/$(Output)/strip/<project_name>"
-                  value="/apps/<project_name>/<project_name>"/>
-    </UploadPath>
-    <ExtDevNames/>
-</SylixOSSetting>
-```
-
-Template rules:
-
-- `ProjectType`:
-  `SylixOSAppProject` for executables, `SylixOSSlibProject` for libraries, BSP
-  project type for BSPs.
-- `DeviceSetting/@DevName`:
-  reuse the board IP already used in the workspace when one is obvious;
-  otherwise leave the agreed default board IP.
-- `DeviceSetting/@Platform`:
-  set it when the workspace platform is known, for example `ARM64_GENERIC`.
-- `DeviceSetting/@WorkDir`:
-  for single executable apps, prefer `/apps/<project_name>`.
-- `UploadPath/PairItem/@key`:
-  for single app executables, prefer
-  `$(WORKSPACE_<project_name>)/$(Output)/strip/<project_name>`.
-- `UploadPath/PairItem/@value`:
-  for single app executables, prefer `/apps/<project_name>/<project_name>`.
-- `OutputSetting`:
-  keep the standard `Output/Debug/Release` trio so IDE and upload tooling stay
-  consistent.
-
-If the project is a one-off throwaway validation utility, fallback upload
-without `.reproject` is still acceptable, but that is the exception, not the
-preferred project shape.
-
-### 1a. Fallback When `.reproject` Is Missing
-
-If the project has no `.reproject`, use this generic fallback instead of
-blocking:
-
-1. Ask for or infer the board IP from the user request.
-2. Ask for or choose an explicit remote destination directory.
-3. Upload the built artifact directly by absolute path.
-
-Recommended default behavior:
-
-- prefer a user-provided remote directory
-- otherwise reuse the directory the user already uses on that board
-- otherwise choose a simple writable app path such as `/media/sdcard5/` or
-  `/apps/<toolname>/` depending on the board workflow
-
-Do not invent a fake `.reproject` for an already existing throwaway binary when
-the user only wants one immediate upload. Generate `.reproject` when creating or
-formalizing a reusable project.
-
-### 3. Verify Network Connectivity
-
-Before uploading, verify the board is reachable:
+Project upload via `.reproject`:
 
 ```bash
-ping -c 3 <board_ip>
+python3 sylixos_ftp_upload/scripts/ftp_sylixos_upload.py -P /path/to/project
 ```
 
-If ping fails, report the error to the user and do not proceed.
-
-Also verify FTP service explicitly:
+Project upload with IP override:
 
 ```bash
-nc -vz -w 3 <board_ip> 21
+python3 sylixos_ftp_upload/scripts/ftp_sylixos_upload.py -P /path/to/project -i 10.13.21.42
 ```
 
-If port `21` is closed, stop and report FTP unavailable.
+Single file upload:
 
-### 4. Get FTP Credentials
-
-**Default credentials for SylixOS boards**:
-- Username: `root`
-- Password: `root`
-
-If the user has specified different credentials, use those instead.
-
-### 5. Upload Files via FTP
-
-Use Python's `ftplib` to upload files:
-
-```python
-from ftplib import FTP
-import os
-
-def ensure_dir(ftp, path):
-    """Ensure directory exists on FTP server, create if needed"""
-    dirs = []
-    while path and path != '/':
-        dirs.append(path)
-        path = os.path.dirname(path)
-    
-    dirs.reverse()
-    for d in dirs:
-        try:
-            ftp.cwd(d)
-        except:
-            try:
-                parent = os.path.dirname(d)
-                if parent and parent != '/':
-                    ftp.cwd(parent)
-                ftp.mkd(d)
-            except:
-                pass
-
-# Connect to FTP
-ftp = FTP()
-ftp.connect(board_ip, 21, timeout=10)
-ftp.login('root', 'root')
-
-# Upload each file
-for src, dst in upload_paths:
-    if os.path.isfile(src):
-        # Upload single file
-        dst_dir = os.path.dirname(dst)
-        ensure_dir(ftp, dst_dir)
-        ftp.cwd(dst_dir)
-        
-        with open(src, 'rb') as f:
-            ftp.storbinary(f'STOR {os.path.basename(dst)}', f)
-        
-    elif os.path.isdir(src):
-        # Upload all files in directory
-        ensure_dir(ftp, dst)
-        ftp.cwd(dst)
-        
-        for filename in os.listdir(src):
-            src_file = os.path.join(src, filename)
-            if os.path.isfile(src_file):
-                with open(src_file, 'rb') as f:
-                    ftp.storbinary(f'STOR {filename}', f)
-
-ftp.quit()
+```bash
+python3 sylixos_ftp_upload/scripts/ftp_sylixos_upload.py -i 10.13.21.42 -f ./demo -t /apps/demo/demo
 ```
 
-When debugging board-side runtime issues, consider uploading both:
+Upload to a remote directory while keeping the local file name:
 
-- stripped binary for normal execution
-- unstripped binary with a distinct suffix for later investigation
-
-This is especially useful for small test applications where the size overhead is
-acceptable.
-
-### 6. Report Results
-
-After upload completes, report to the user:
-- Number of files uploaded successfully
-- Number of files failed (if any)
-- Total data transferred
-- File locations on the board
-
-Example output:
+```bash
+python3 sylixos_ftp_upload/scripts/ftp_sylixos_upload.py -i 10.13.21.42 -f ./libfoo.so -d /lib/
 ```
-=== 上传完成 ===
-成功: 11/11
-失败: 0/11
 
-文件位置:
-- 驱动: /lib/modules/drivers/lyn_drv.ko
-- 库: /lib/liblyn_*.so
-- 测试工具: /apps/lynxi_driver_test/
+Batch upload from a config file:
 
-总数据量: 约 3.5MB
+```bash
+python3 sylixos_ftp_upload/scripts/ftp_sylixos_upload.py -i 10.13.21.42 -c upload_list.txt
 ```
+
+Recursive rootfs upload:
+
+```bash
+python3 sylixos_ftp_upload/scripts/ftp_sylixos_upload.py -i 10.13.21.42 --rootfs /path/to/rootfs --rootfs-target /
+```
+
+Optional overrides:
+
+- `-m 755`: set chmod mode explicitly; default is already `755`
+- `--no-chmod`: disable remote chmod only when the user explicitly wants that
+- `--no-sync`: disable final remote sync only when the user explicitly wants
+  that
+
+## Path Resolution Notes
+
+The bundled script already handles the normal SylixOS cases:
+
+- reads `.reproject` using `GB2312`
+- resolves `$(WORKSPACE_<project>)`
+- resolves `$(Output)`, `$(Debug)`, and `$(Release)`
+- infers platform from `DeviceSetting/@Platform`, `config.mk`, and existing
+  `build/<platform>/` directories
+- supports both `build/<platform>/Release` style outputs and older project-local
+  `Release/Debug` outputs
+
+Do not reimplement this path resolution unless the script proves insufficient
+for the current project shape.
 
 ## Error Handling
 
-### Network Errors
-- If ping fails: Report "无法连接到板卡 IP: <ip>"
-- If FTP connection fails: Report "FTP 连接失败，请检查板卡 FTP 服务是否运行"
+If reachability checks fail:
 
-### File Errors
-- If source file doesn't exist: Skip and report in summary
-- If FTP upload fails: Catch exception, report which file failed, continue with remaining files
+- stop and report the exact failing step
+- do not attempt upload when `ping` fails or port `21` is closed
 
-If `.reproject` is absent and the user gave only a local binary path:
+If upload partially fails:
 
-- upload that one file directly
-- do not fail merely because project metadata is missing
+- continue uploading remaining items when the script can continue safely
+- report failed local paths and intended remote paths
 
-### Permission Errors
-- If FTP credentials are wrong: Report "FTP 认证失败，请检查用户名和密码"
-- If no write permission: Report "目标目录无写入权限: <path>"
+If FTP authentication fails:
 
-## Common File Types
+- report credential failure explicitly
 
-SylixOS projects typically upload:
-- **Kernel modules**: `*.ko` files → `/lib/modules/drivers/`
-- **Shared libraries**: `*.so` files → `/lib/`
-- **Static libraries**: `*.a` files → `/lib/`
-- **Executables**: Test tools and utilities → `/apps/` or `/usr/bin/`
-- **Configuration files**: `*.conf`, `*.cfg` → `/etc/`
+If the board rejects chmod or sync:
 
-## Platform-Specific Notes
+- report that upload data transfer may have succeeded but post-upload board
+  state is incomplete
+- treat that as a meaningful warning or failure depending on the user goal
 
-### ARM64_GENERIC Platform
-- Build output directory: `build/ARM64_GENERIC/Release/`
-- Stripped binaries: `build/ARM64_GENERIC/Release/strip/`
-- Prefer uploading stripped versions for production
+## Report Back
 
-### Directory Structure
-- Drivers: `/lib/modules/drivers/`
-- Libraries: `/lib/`
-- Applications: `/apps/` or `/usr/bin/`
-- Test tools: `/apps/<project>_test/`
+After upload, report:
 
-## Complete Example
+- board IP
+- upload mode used: project, single file, config batch, or rootfs
+- number of upload items succeeded and failed
+- actual file count transferred when available
+- whether remote `chmod 755` was applied
+- whether final remote `sync` succeeded
+- final remote paths of the important artifacts
 
-```python
-#!/usr/bin/env python3
-import xml.etree.ElementTree as ET
-from ftplib import FTP
-import os
-import sys
-
-def parse_reproject(project_path):
-    """Parse .reproject file and return board IP and upload list"""
-    reproject_file = os.path.join(project_path, '.reproject')
-    
-    with open(reproject_file, 'r', encoding='gb2312') as f:
-        content = f.read()
-    
-    root = ET.fromstring(content)
-    
-    # Get board IP
-    device_setting = root.find('.//DeviceSetting')
-    board_ip = device_setting.get('DevName')
-    work_dir = device_setting.get('WorkDir')
-    platform = device_setting.get('Platform') or 'ARM64_GENERIC'
-    
-    debug_level = 'release'
-    config_mk = os.path.join(project_path, 'config.mk')
-    if os.path.exists(config_mk):
-        with open(config_mk, 'r', encoding='utf-8', errors='ignore') as f:
-            config_text = f.read().lower()
-        if 'debug_level := debug' in config_text or 'debug_level = debug' in config_text:
-            debug_level = 'debug'
-    
-    output_alias = f'build/{platform}/Release'
-    if debug_level == 'debug':
-        output_alias = f'build/{platform}/Debug'
-    
-    # Get project name from path
-    project_name = os.path.basename(project_path)
-    
-    # Parse upload paths
-    upload_paths = []
-    for pair in root.findall('.//UploadPath/PairItem'):
-        src = pair.get('key')
-        dst = pair.get('value')
-        
-        # Replace workspace variable
-        src = src.replace(f'$(WORKSPACE_{project_name})', project_path)
-        src = src.replace('$(Output)', output_alias)
-        
-        if os.path.exists(src):
-            upload_paths.append((src, dst))
-    
-    return board_ip, work_dir, upload_paths
-
-def upload_to_board(board_ip, upload_paths, username='root', password='root'):
-    """Upload files to board via FTP"""
-    ftp = FTP()
-    ftp.connect(board_ip, 21, timeout=10)
-    ftp.login(username, password)
-    
-    success = 0
-    failed = 0
-    
-    for src, dst in upload_paths:
-        try:
-            if os.path.isfile(src):
-                dst_dir = os.path.dirname(dst)
-                ensure_dir(ftp, dst_dir)
-                ftp.cwd(dst_dir)
-                
-                with open(src, 'rb') as f:
-                    ftp.storbinary(f'STOR {os.path.basename(dst)}', f)
-                
-                success += 1
-            elif os.path.isdir(src):
-                ensure_dir(ftp, dst)
-                ftp.cwd(dst)
-                
-                for filename in os.listdir(src):
-                    src_file = os.path.join(src, filename)
-                    if os.path.isfile(src_file):
-                        with open(src_file, 'rb') as f:
-                            ftp.storbinary(f'STOR {filename}', f)
-                
-                success += 1
-        except Exception as e:
-            print(f"Failed to upload {src}: {e}")
-            failed += 1
-    
-    ftp.quit()
-    return success, failed
-
-# Usage
-if __name__ == '__main__':
-    project_path = '/path/to/project'
-    board_ip, work_dir, upload_paths = parse_reproject(project_path)
-    success, failed = upload_to_board(board_ip, upload_paths)
-    print(f"Success: {success}, Failed: {failed}")
-```
-
-## Tips
-
-1. **Always verify network connectivity first** - Use ping before attempting FTP
-2. **Check file existence** - Skip non-existent files and report them
-3. **Create directories automatically** - Use `ensure_dir()` to create target directories
-4. **Handle encoding correctly** - `.reproject` files use GB2312 encoding
-5. **Report progress** - Show which file is being uploaded for better user experience
-6. **Use binary mode** - Always use `storbinary()` for uploading files
-7. **Handle both files and directories** - Some upload items are directories containing multiple files
-8. **Resolve `$(Output)` correctly** - It usually maps to `build/<PLATFORM>/Release` or `build/<PLATFORM>/Debug`
-9. **Create `.reproject` for new reusable projects** - Especially standalone app test tools that will be rebuilt and re-uploaded later
-8. **Timeout settings** - Set reasonable timeout (10s) for FTP connections
-9. **Error recovery** - If one file fails, continue with remaining files
-
-## Security Notes
-
-- Default credentials (`root`/`root`) are common for development boards
-- For production systems, always use secure credentials
-- Consider using SFTP instead of FTP for production environments
-- FTP transmits credentials in plain text - use only on trusted networks
+If the next step is runtime verification, pass the resolved remote path(s) to
+`sylixos_telnet_test`.
