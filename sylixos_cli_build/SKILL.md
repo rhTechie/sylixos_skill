@@ -61,6 +61,24 @@ BSP=/abs/path/to/bsp_project
 MULTI_MK="$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"
 ```
 
+## Repository Hygiene Before Invasive Debugging
+
+Before making risky multi-file changes in a component:
+
+1. record the current code version for that component
+2. if it is already a Git repository, note the branch, commit, or dirty state
+3. if it is not a Git repository, initialize a local Git repository before invasive debugging so later diffs and rollback are manageable
+
+Recommended minimum when no Git history exists:
+
+```sh
+git init
+git add -A
+git status --short
+```
+
+Create a baseline commit or tag only when the user permits it. Even without a commit, a fresh local repository still improves visibility of later edits.
+
 ## Platform Selection
 
 Do not hardcode `PLATFORMS` from historical BSP settings. Choose it from the real base project layout.

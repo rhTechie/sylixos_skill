@@ -173,6 +173,13 @@ If telnet output is noisy or unstable:
 - write results to a file
 - fetch or print the file after the run
 
+Also maintain a process document during the investigation:
+
+- append each major round as it happens
+- include the date to day precision
+- record board roles, CPU placement, pressure model, result file path, and conclusion
+- distinguish verified findings from candidate-only ideas
+
 ## 8. Board-Side Execution Practice
 
 For repeated long-run experiments:
@@ -182,6 +189,7 @@ For repeated long-run experiments:
 3. upload only the changed artifacts when possible
 4. fix execute permissions explicitly
 5. ensure old stress processes are fully cleaned up before the next run
+6. if the setup uses a peer board, restore the peer board too when its leftover state could affect the next round
 
 Do not trust a new result if the prior pressure processes may still be alive.
 
@@ -208,10 +216,22 @@ Reusable rules:
 - if a shell command sequence is brittle, upload a script and execute the script
 - if a harness treats `.sh` specially, understand whether it skips other arguments
 - if a session is too noisy, use a second session or fetch result files over FTP
+- prefer saving board-side results to files instead of relying on continuous console capture for long or chatty tests
 
 Do not confuse harness or shell behavior with the real root cause.
 
-## 10. Acceptance Standard For A Claimed Optimization
+## 10. Instrumentation Escalation Rule
+
+When progress stalls and no clean hypothesis remains:
+
+1. split the end-to-end path into timed stages
+2. add timestamps at the narrowest practical layer first
+3. if needed, continue downward into driver or base code
+4. keep one instrumentation revision per narrowing step and record which code version produced which data
+
+This is a generic escalation method for timing issues; do not wait for complete uncertainty before using it.
+
+## 11. Acceptance Standard For A Claimed Optimization
 
 Do not claim success until all are true:
 
@@ -223,7 +243,7 @@ Do not claim success until all are true:
 
 If one of these is missing, the work is still in-progress.
 
-## 11. Reporting Template
+## 12. Reporting Template
 
 Structure final findings as:
 

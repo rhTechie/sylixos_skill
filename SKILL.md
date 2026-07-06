@@ -20,6 +20,20 @@ Use this skill for any SylixOS development task, including:
 - Explaining Linux vs SylixOS networking API differences encountered during debugging
 - Complete development workflow (build + upload + test)
 
+## Cross-Cutting Practice
+
+Apply these habits across all SylixOS sub-skills:
+
+1. Keep a process document while working, not only at the end.
+2. Date each major investigation entry to day precision, for example `2026-07-06`.
+3. Prefer result files or log files over long live console streams for meaningful tests.
+4. Record exact commands, CPU placement assumptions, board IPs, and result file paths.
+5. Record the code version of every touched component before risky changes.
+6. If the target code directory has no Git history, initialize a local Git repository before invasive multi-file debugging so diffs and rollbacks are manageable.
+7. When a timing problem has no clear next hypothesis, split the path with timestamp instrumentation and narrow it stage by stage; do this in the app, driver, or base layer as needed.
+8. After a major validation round, restore both the DUT and the peer board to a clean state when state carry-over could contaminate the next result.
+9. When replacing BSP boot images, treat upload as incomplete until the new image is copied into `/boot`, `sync` is issued on the board, the board is rebooted, and the post-reboot build time is verified.
+
 ## Sub-Skills
 
 This master skill delegates to specialized sub-skills:

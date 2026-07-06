@@ -136,6 +136,7 @@ SylixOS 项目文件上传到目标板卡子 skill。
 - 自动创建目标目录
 - 上传后默认执行远端 `chmod 755`
 - 全部上传完成后默认执行一次远端 `sync`
+- 对于 BSP 启动镜像，覆盖 `/boot` 前优先备份当前活动镜像
 - 为新建的可复用 SylixOS 工程沉淀 `.reproject` 模板
 - 报告上传结果
 
@@ -190,7 +191,8 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 8. **输出目录**: 标准输出目录是 `build/<PLATFORM>/Debug/` 或 `build/<PLATFORM>/Release/`，例如 `build/ARM64_GENERIC/Release/`
 9. **新建工程元数据**: 对于后续会反复上传和板测的 SylixOS 新工程，创建时就应生成 `.reproject`，至少包含 `DeviceSetting`、`OutputSetting` 和一个正确的 `UploadPath`
 10. **长期测试轮次**: 对于长时间板卡验证问题，重大策略变更、绑核变更或核心二进制变更前优先 reboot，再进入下一轮验证
-11. **仓库维护约束**: 每次新增或创建 skill 文件时，同步更新 `README.md`，确保人类读仓库时能看到新 skill 的用途和位置
+11. **BSP 镜像替换**: 替换 `/boot` 下的 BSP 镜像时，先备份当前镜像，再上传新镜像；上传后执行 `sync`、显式 `reboot`，并在重启后核对 build time 是否与新镜像一致
+12. **仓库维护约束**: 每次新增或创建 skill 文件时，同步更新 `README.md`，确保人类读仓库时能看到新 skill 的用途和位置
 
 ## 扩展说明
 

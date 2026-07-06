@@ -145,6 +145,31 @@ For long-running or interactive tests:
 - capture the last visible output
 - report that the process did not naturally return before timeout
 
+For long or noisy tests, prefer file-based capture:
+
+- write the board-side output to a result file when the shell and harness support it
+- use the file as the primary artifact for later review
+- only rely on live console output for short or quiet commands
+
+This reduces false conclusions caused by telnet noise, output truncation, or connection instability.
+
+### 7. BSP Image Post-Upload Verification
+
+When the uploaded artifact is a BSP boot image in `/boot`, do not stop after
+connectivity and file checks.
+
+Required sequence:
+
+1. verify the expected boot image files exist in `/boot`
+2. run `sync`
+3. execute an explicit `reboot`
+4. wait for network reconnection instead of assuming immediate availability
+5. log back in and verify the boot banner or equivalent runtime version output
+   shows the expected build time
+
+Treat the image replacement as unverified until the post-reboot build time is
+confirmed.
+
 ## Reporting Requirements
 
 Always report:
@@ -155,6 +180,7 @@ Always report:
 - whether execute permission had to be fixed
 - key board-side output
 - whether the shell prompt returned normally
+- for BSP image replacement, whether the post-reboot build time matched the expected image
 
 ## Common SylixOS Notes
 
@@ -164,6 +190,7 @@ Always report:
 - local `file` output is only a hint; actual board execution result is the real validation
 - for hardware-facing tests, capture pre/post board state when relevant
   for example `ifconfig`, driver status, or device-node presence
+- for paired-board tests, remember that the peer board may also need reboot or cleanup before the next round
 
 ## Error Handling
 
@@ -189,6 +216,14 @@ obvious, ask the user for the exact command instead of guessing.
 
 If `.reproject` is missing and the remote path is explicit, that is not
 ambiguous by itself. Execute the explicit file path after permission checks.
+
+## Cleanup Discipline
+
+After a major validation round:
+
+1. stop or confirm exit of all board-side stress processes
+2. if the next round materially changes strategy or binaries, prefer reboot
+3. if the test uses a peer board, restore the peer too when its leftover traffic or state could pollute the next result
 
 ## Integration Order
 

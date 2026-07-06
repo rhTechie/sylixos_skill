@@ -66,6 +66,24 @@ Permission handling:
 Do not silently skip the permission step. This fixes the known issue where
 uploaded files arrive without execute permission.
 
+## BSP Boot Image Replacement
+
+When the uploaded artifact is a BSP boot image such as:
+
+- `*.bin`
+- `*.dtb`
+
+and the user intends the board to boot from the new image, use this stricter flow:
+
+1. identify the real boot directory, typically `/boot`
+2. before overwrite, preserve or create a backup of the currently active boot image in `/boot`
+3. upload the new image into the real boot directory
+4. do not treat the replacement as complete until one remote `sync` has succeeded
+
+The reboot itself belongs to the telnet validation step, but the upload skill
+must surface that a post-upload reboot is mandatory for the image to take
+effect.
+
 ## Command Patterns
 
 Use the script from the workspace root or by absolute path.
