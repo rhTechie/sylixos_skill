@@ -1,6 +1,6 @@
 ---
 name: sylixos
-description: Master skill for SylixOS development workflow. Automatically determines whether to handle Linux-to-SylixOS porting analysis, build projects, upload files to target boards, or run telnet-based board-side tests based on the user's request.
+description: Master skill for SylixOS development workflow. Automatically determines whether to handle Linux-to-SylixOS driver porting analysis, build projects, upload files to target boards, run telnet-based board-side tests, debug networking behavior, or perform staged long-run validation based on the user's request.
 ---
 
 # SylixOS Development Workflow
@@ -10,7 +10,7 @@ This is the master skill for SylixOS development. It automatically routes to the
 ## When to Use
 
 Use this skill for any SylixOS development task, including:
-- Porting Linux drivers or SDKs to SylixOS
+- Porting Linux character-device drivers to SylixOS
 - Summarizing verified SylixOS migration experience from an existing project
 - Building/compiling SylixOS projects
 - Uploading files to target boards
@@ -25,14 +25,15 @@ Use this skill for any SylixOS development task, including:
 Apply these habits across all SylixOS sub-skills:
 
 1. Keep a process document while working, not only at the end.
-2. Date each major investigation entry to day precision, for example `2026-07-06`.
+2. Date each major investigation entry to day precision using the actual current date in `YYYY-MM-DD` format.
 3. Prefer result files or log files over long live console streams for meaningful tests.
 4. Record exact commands, CPU placement assumptions, board IPs, and result file paths.
 5. Record the code version of every touched component before risky changes.
 6. If the target code directory has no Git history, initialize a local Git repository before invasive multi-file debugging so diffs and rollbacks are manageable.
-7. When a timing problem has no clear next hypothesis, split the path with timestamp instrumentation and narrow it stage by stage; do this in the app, driver, or base layer as needed.
-8. After a major validation round, restore both the DUT and the peer board to a clean state when state carry-over could contaminate the next result.
-9. When replacing BSP boot images, treat upload as incomplete until the new image is copied into `/boot`, `sync` is issued on the board, the board is rebooted, and the post-reboot build time is verified.
+7. For driver porting, record the original Linux pattern, the chosen SylixOS pattern, wrapper/callback points inspected, and whether the result is source-review-only, compile-only, or board-verified.
+8. When a timing problem has no clear next hypothesis, split the path with timestamp instrumentation and narrow it stage by stage; do this in the app, driver, or base layer as needed.
+9. After a major validation round, restore both the DUT and the peer board to a clean state when state carry-over could contaminate the next result.
+10. When replacing BSP boot images, treat upload as incomplete until the new image is copied into `/boot`, `sync` is issued on the board, the board is rebooted, and the post-reboot build time is verified.
 
 ## Sub-Skills
 
@@ -91,19 +92,21 @@ This master skill delegates to specialized sub-skills:
 
 **Location:** `sylixos_telnet_test/SKILL.md`
 
-### 4. `sylixos-driver-porting` - Linux Driver/SDK Porting Analysis
+### 4. `sylixos-driver-porting` - Linux Character-Device Driver Porting
 
 **Trigger conditions:**
-- User asks to port Linux driver or SDK code to SylixOS
+- User asks to port Linux character-device driver code to SylixOS
 - User asks to summarize or review an existing SylixOS port
-- User mentions "移植", "port", "适配", "兼容层", "driver migration", "SDK migration"
+- User mentions "移植", "port", "适配", "兼容层", "character device", "interrupt", "driver migration"
 - User wants a reusable skill or checklist for later similar ports
+- User asks to keep or improve the process record for driver porting/debugging
 
 **What it does:**
 - Compares Linux original code with current SylixOS ported code
 - Verifies migration conclusions against active source instead of trusting markdown notes
-- Extracts reusable patterns across driver, HAL, SDK, sample, and build layers
+- Extracts reusable patterns for character-device registration and interrupt registration/callback adaptation
 - Distinguishes verified fixes from candidate-only ideas that are not yet landed
+- Maintains lightweight process documentation for multi-step porting, debugging, or board-validation work
 
 **Location:** `sylixos-driver-porting/SKILL.md`
 
@@ -176,8 +179,10 @@ User says:
 ### Porting / Migration Analysis
 User says:
 - "把 Linux 驱动移植到 SylixOS"
+- "把 Linux 字符设备驱动移植到 SylixOS"
 - "总结这个移植项目的经验"
 - "分析当前代码里哪些移植结论已经落地"
+- "记录这次驱动移植和板端验证过程"
 - "生成一个后续可复用的 skill"
 
 → Use `sylixos-driver-porting` skill
@@ -397,6 +402,8 @@ Action:
 | Build + Upload | 编译并上传, build and upload | Build then upload |
 | Build + Upload + Test | 编译上传并测试, deploy and test | Build then upload then test |
 | Fix errors | 修复, fix, 错误, error | sylixos_cli_build |
+| Network validation | 网络, 双网口, AF_PACKET, MTU | sylixos-network |
+| Long-run validation | 长时间, 抖动, soak, endurance | sylixos-long-run-validation |
 
 ## Tips
 

@@ -1,6 +1,6 @@
 ---
 name: sylixos-driver-porting
-description: Use when porting Linux character-device drivers to SylixOS, especially when adapting character-device registration and interrupt registration/callback logic. Focus on code-level differences between Linux and SylixOS and summarize migration precautions that are reusable across projects.
+description: Use when porting Linux character-device drivers to SylixOS, especially when adapting character-device registration and interrupt registration/callback logic. Focus on code-level differences between Linux and SylixOS, keep a lightweight process record for non-trivial porting/debugging work, and summarize migration precautions that are reusable across projects.
 ---
 
 # SylixOS Driver Porting
@@ -9,6 +9,7 @@ Use this skill when migrating a Linux driver to SylixOS and the key work involve
 
 - character-device registration and node creation
 - interrupt registration, callback signature adaptation, and interrupt dispatch
+- evidence-based porting or debugging that spans multiple edits, builds, uploads, or board-side validation rounds
 
 This skill is intentionally generic. Do not depend on any project-specific path or filename in the final output. Use the current code only to confirm the general rules.
 
@@ -22,6 +23,8 @@ For this skill, the reusable conclusions are limited to:
 2. interrupt registration and interrupt callback differences between Linux and SylixOS
 
 Do not expand into DMA, SDK, samples, build systems, or project-specific debug history unless the user explicitly asks for that.
+
+Process documentation is a workflow requirement, not a third reusable technical category. Keep it during real work, but keep the final reusable summary focused on the two categories above unless the user asks for the investigation history.
 
 ## How To Analyze
 
@@ -42,6 +45,26 @@ rg -n "alloc_chrdev_region|cdev_add|device_create|file_operations|iosDrvInstallE
 ```
 
 Your output should abstract the implementation into OS-level rules, not file-level notes.
+
+## Process Documentation
+
+For non-trivial driver porting or debugging, maintain a process document while working, not only after the final conclusion.
+
+Use an existing project note if one is already present. If not, create a small project-local note such as `docs/sylixos-porting-process.md` when file edits are in scope.
+
+Each major entry should include:
+
+- date to day precision using the actual current date in `YYYY-MM-DD` format
+- baseline code version or commit for every touched component
+- exact build, upload, module-load, and board-side test commands
+- board IP, target path, module or executable path, and result/log file path
+- the current hypothesis, the code change made for it, and the expected observation
+- whether the result is verified on hardware, compile-only, source-review-only, or still candidate
+- rollback note when a change is experimental or only for instrumentation
+
+If the target code directory has no Git history and the work will touch multiple files, initialize a local Git repository before invasive edits so diffs and rollbacks stay manageable.
+
+Prefer result files or log files over long live telnet streams. Do not paste raw logs into the final reusable summary; reference the saved paths and extract only the conclusion that matters.
 
 ## 1. Character Device Registration
 

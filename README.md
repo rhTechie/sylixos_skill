@@ -18,7 +18,7 @@
 ```
 
 AI 会根据你的指令自动判断使用哪个子 skill：
-- **移植分析**: "把 Linux 驱动移植到 SylixOS" / "总结移植经验" → 自动使用移植分析 skill
+- **移植分析**: "把 Linux 字符设备驱动移植到 SylixOS" / "总结中断适配经验" / "记录驱动移植过程" → 自动使用移植分析 skill
 - **编译项目**: "编译 xxx 项目" → 自动使用编译 skill
 - **上传到板卡**: "上传 xxx 到板卡" → 自动使用上传 skill
 - **板卡测试**: "telnet 登录板卡并测试 xxx" → 自动使用 telnet 测试 skill
@@ -33,7 +33,7 @@ sylixos_skill/
 ├── SKILL.md                      # 主 skill 入口（统一加载点）
 ├── README.md                     # 本文档
 ├── sylixos-driver-porting/
-│   └── SKILL.md                  # Linux 驱动/SDK 向 SylixOS 移植分析 skill
+│   └── SKILL.md                  # Linux 字符设备驱动向 SylixOS 移植分析 skill
 ├── sylixos-network/
 │   └── SKILL.md                  # SylixOS 网络验证与接口差异 skill
 ├── sylixos-long-run-validation/
@@ -79,18 +79,19 @@ SylixOS CLI 命令行构建子 skill。
 
 ### `sylixos-driver-porting/SKILL.md`
 
-Linux 驱动/SDK 向 SylixOS 迁移分析子 skill。
+Linux 字符设备驱动向 SylixOS 迁移分析子 skill。
 
 **功能**:
 - 对照 Linux 原始代码与 SylixOS 移植代码
-- 从实际源码和构建文件中提取已落地的移植模式
+- 从实际源码中提取字符设备注册、节点创建、`fo_*` 回调、中断注册和中断分发的移植模式
 - 区分“代码已验证”和“仅文档猜测”的结论
-- 总结驱动层、HAL 层、SDK 层、sample 层与构建层的迁移要点
+- 对非平凡移植或调试维护轻量过程文档，记录版本、命令、板端验证、日志路径和结论状态
 
 **适用场景**:
 - 评审现有 SylixOS 移植质量
 - 为类似驱动后续移植沉淀 checklist 或 skill
 - 排查迁移文档与当前代码不一致的问题
+- 记录多轮驱动移植、构建、上传和板端验证过程
 
 ### `sylixos-network/SKILL.md`
 
@@ -162,23 +163,6 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 - 通过 telnet 做板端冒烟测试
 - 将“编译 + 上传 + 运行验证”串成完整闭环
 
-### `sylixos_telnet_test/SKILL.md`
-
-SylixOS 板卡 Telnet 登录与板端测试子 skill。
-
-**功能**:
-- 从用户输入或 `.reproject` 中提取板卡 IP、工作目录和远端文件路径
-- 验证板卡 `23` 端口可达
-- 通过 telnet 登录板卡
-- 检查上传文件是否存在并修正执行权限
-- 执行板端测试命令并采集输出
-- 汇总真实板端运行结果
-
-**适用场景**:
-- 上传后立即在板卡上运行应用程序
-- 通过 telnet 做板端冒烟测试
-- 将“编译 + 上传 + 运行验证”串成完整闭环
-
 ## 注意事项
 
 1. **编译前提**: 确保 SylixOS 工具链已安装并在 PATH 中
@@ -190,15 +174,16 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 7. **构建入口**: companion project 优先使用 `make all|clean -f "$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"`；未做 wrapper 的本地 `Makefile` 直接执行 `make clean` 可能只清掉 `build//Release`，不会清掉真实的 `build/<PLATFORM>/Release`
 8. **输出目录**: 标准输出目录是 `build/<PLATFORM>/Debug/` 或 `build/<PLATFORM>/Release/`，例如 `build/ARM64_GENERIC/Release/`
 9. **新建工程元数据**: 对于后续会反复上传和板测的 SylixOS 新工程，创建时就应生成 `.reproject`，至少包含 `DeviceSetting`、`OutputSetting` 和一个正确的 `UploadPath`
-10. **长期测试轮次**: 对于长时间板卡验证问题，重大策略变更、绑核变更或核心二进制变更前优先 reboot，再进入下一轮验证
-11. **BSP 镜像替换**: 替换 `/boot` 下的 BSP 镜像时，先备份当前镜像，再上传新镜像；上传后执行 `sync`、显式 `reboot`，并在重启后核对 build time 是否与新镜像一致
-12. **仓库维护约束**: 每次新增或创建 skill 文件时，同步更新 `README.md`，确保人类读仓库时能看到新 skill 的用途和位置
+10. **过程文档记录**: 对非平凡驱动移植、长期验证或多轮板端调试，边做边维护过程文档，记录日期、代码版本、命令、板卡 IP、结果文件路径、假设和验证状态
+11. **长期测试轮次**: 对于长时间板卡验证问题，重大策略变更、绑核变更或核心二进制变更前优先 reboot，再进入下一轮验证
+12. **BSP 镜像替换**: 替换 `/boot` 下的 BSP 镜像时，先备份当前镜像，再上传新镜像；上传后执行 `sync`、显式 `reboot`，并在重启后核对 build time 是否与新镜像一致
+13. **仓库维护约束**: 每次新增或创建 skill 文件时，同步更新 `README.md`，确保人类读仓库时能看到新 skill 的用途和位置
 
 ## 扩展说明
 
 本仓库采用模块化设计，便于后续扩展：
 - 每个子 skill 独立维护
-- 主 skill 负责路由和协调
+- 主 skill 负责路由、协调和跨 skill 过程记录约束
 - 完整链路推荐顺序为：编译 → 上传 → telnet 测试
 - FTP 上传默认入口为 `sylixos_ftp_upload/scripts/ftp_sylixos_upload.py`，统一处理路径解析、权限修正和最终 `sync`
 - 可随时添加新的子 skill（如调试、专项验证等）
