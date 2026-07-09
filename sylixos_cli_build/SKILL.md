@@ -227,6 +227,33 @@ make -C "$COMPAT" clean -f "$MULTI_MK"
 make -C "$BSP" clean -f "$MULTI_MK"
 ```
 
+## BSP Board Selection
+
+When the BSP project selects target boards through a checked-in top-level
+`Makefile` list such as:
+
+```make
+BOARD_LIST :=
+BOARD_LIST += lubancat
+BOARD_LIST += adp
+...
+BOARD_LIST += tl3568_evm
+```
+
+and the user explicitly asks for one board package, prefer changing that
+`BOARD_LIST` in the BSP `Makefile` to the requested board instead of using a
+command-line override like `BOARD_LIST=tl3568_evm`.
+
+Reason:
+
+- in these projects, board package selection is a project-side build setting
+- keeping it in the `Makefile` matches the user's normal manual build path
+- it avoids leaving the real project state different from the command shown in
+  the session
+
+Use a command-line `BOARD_LIST=...` override only as a last-resort debugging
+fallback or when the user explicitly asks not to modify the file.
+
 ## Command-Line Override Rule
 
 If `config.mk` is not yet fixed, command-line overrides must also use absolute
@@ -289,6 +316,15 @@ Typical successful outputs include:
 - License SDK archives under `build/<PLATFORM>/Release/`
 - Compatibility layer `linuxcompat.ko` and `liblinuxcompat.a`
 - BSP `*.elf`, `*.bin`, `*.dtb`, `*.siz`
+
+When reporting BSP outputs, distinguish:
+
+- outputs created by the current build
+- pre-existing dirty or untracked files already present in the BSP tree
+
+Do not describe a pre-existing untracked artifact as something newly added by
+the current build unless the current build log proves it was generated in this
+run.
 
 ## Common Failures
 

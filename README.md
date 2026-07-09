@@ -174,10 +174,12 @@ SylixOS 板卡 Telnet 登录与板端测试子 skill。
 7. **构建入口**: companion project 优先使用 `make all|clean -f "$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"`；未做 wrapper 的本地 `Makefile` 直接执行 `make clean` 可能只清掉 `build//Release`，不会清掉真实的 `build/<PLATFORM>/Release`
 8. **输出目录**: 标准输出目录是 `build/<PLATFORM>/Debug/` 或 `build/<PLATFORM>/Release/`，例如 `build/ARM64_GENERIC/Release/`
 9. **新建工程元数据**: 对于后续会反复上传和板测的 SylixOS 新工程，创建时就应生成 `.reproject`，至少包含 `DeviceSetting`、`OutputSetting` 和一个正确的 `UploadPath`
-10. **过程文档记录**: 对非平凡驱动移植、长期验证或多轮板端调试，边做边维护过程文档，记录日期、代码版本、命令、板卡 IP、结果文件路径、假设和验证状态
+10. **过程文档记录**: 仅对非平凡驱动移植、长期验证、多轮板端调试，或用户明确要求留痕时维护过程文档；普通成功重编默认不额外建过程文档
 11. **长期测试轮次**: 对于长时间板卡验证问题，重大策略变更、绑核变更或核心二进制变更前优先 reboot，再进入下一轮验证
 12. **BSP 镜像替换**: 替换 `/boot` 下的 BSP 镜像时，先备份当前镜像，再上传新镜像；上传后执行 `sync`、显式 `reboot`，并在重启后核对 build time 是否与新镜像一致
 13. **仓库维护约束**: 每次新增或创建 skill 文件时，同步更新 `README.md`，确保人类读仓库时能看到新 skill 的用途和位置
+14. **普通编译日志**: 普通成功重编默认不单独落构建日志文件；仅在用户要求、需要保留失败现场、或验证类任务需要结果文件时才额外保存日志
+15. **BSP 板级包选择**: 若 BSP 顶层 `Makefile` 通过 `BOARD_LIST` 选择板级包，且用户明确指定目标板级包，优先直接修改 `Makefile` 中的 `BOARD_LIST`，而不是长期依赖命令行 `BOARD_LIST=...` 覆盖
 
 ## 扩展说明
 

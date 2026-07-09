@@ -24,10 +24,10 @@ Use this skill for any SylixOS development task, including:
 
 Apply these habits across all SylixOS sub-skills:
 
-1. Keep a process document while working, not only at the end.
-2. Date each major investigation entry to day precision using the actual current date in `YYYY-MM-DD` format.
-3. Prefer result files or log files over long live console streams for meaningful tests.
-4. Record exact commands, CPU placement assumptions, board IPs, and result file paths.
+1. Keep a process document while working only for multi-round problem investigation, driver porting, long-run validation, or when the user explicitly asks to preserve the process.
+2. Date each major investigation entry to day precision using the actual current date in `YYYY-MM-DD` format when such a process document is needed.
+3. Prefer result files or log files over long live console streams for meaningful tests and validation runs; do not create standalone build logs by default for ordinary successful rebuilds unless the user asks or failure capture is needed.
+4. Record exact commands, CPU placement assumptions, board IPs, and result or log file paths when the task is in one of the documented investigation or validation modes above.
 5. Record the code version of every touched component before risky changes.
 6. If the target code directory has no Git history, initialize a local Git repository before invasive multi-file debugging so diffs and rollbacks are manageable.
 7. For driver porting, record the original Linux pattern, the chosen SylixOS pattern, wrapper/callback points inspected, and whether the result is source-review-only, compile-only, or board-verified.
