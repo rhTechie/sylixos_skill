@@ -34,6 +34,7 @@ Apply these habits across all SylixOS sub-skills:
 8. When a timing problem has no clear next hypothesis, split the path with timestamp instrumentation and narrow it stage by stage; do this in the app, driver, or base layer as needed.
 9. After a major validation round, restore both the DUT and the peer board to a clean state when state carry-over could contaminate the next result.
 10. When replacing BSP boot images, treat upload as incomplete until the new image is copied into `/boot`, `sync` is issued on the board, the board is rebooted, and the post-reboot build time is verified.
+11. For complex SylixOS tasks, default to multi-agent processing (`请用多 agent 模式处理`) when subagents are available and the work can be split safely. Complex tasks include driver porting, multi-file code bug debugging, root-cause investigation, board-side problem triage, networking validation, long-run validation, and build-upload-test failures. Keep one main agent responsible for planning, integration, conflict resolution, and final verification; keep simple build/upload/test requests single-agent unless complexity emerges.
 
 ## Sub-Skills
 
