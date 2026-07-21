@@ -179,6 +179,8 @@ Also maintain a process document during the investigation:
 - include the date to day precision
 - record board roles, CPU placement, pressure model, result file path, and conclusion
 - distinguish verified findings from candidate-only ideas
+- write the document in Chinese by default; preserve commands, paths, source
+  identifiers, logs, hashes, and API names verbatim
 
 ## 8. Board-Side Execution Practice
 
@@ -190,6 +192,14 @@ For repeated long-run experiments:
 4. fix execute permissions explicitly
 5. ensure old stress processes are fully cleaned up before the next run
 6. if the setup uses a peer board, restore the peer board too when its leftover state could affect the next round
+
+For every reboot caused by an image replacement, use a 60-second reconnect
+deadline by default, or 30 seconds when explicitly requested. Poll both ping and
+Telnet, and require at least one channel to recover unless the board acceptance
+criteria explicitly require both. If the deadline expires with neither channel
+available, classify the candidate as failed, stop further automated uploads and
+reboots, preserve logs and backups, and request human or serial-console
+intervention.
 
 Do not trust a new result if the prior pressure processes may still be alive.
 

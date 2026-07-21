@@ -1,31 +1,37 @@
 ---
 name: sylixos_cli_build
-description: Use when building SylixOS companion projects from Linux CLI. Always discover the real base, compatibility layer, license SDK, and BSP directories first, then persist all configurable build paths and platform variables into each project's config.mk with absolute paths. Keep command-line parameters only for items that cannot live in config.mk, such as -f <multi-platform.mk>.
+description: Use when building SylixOS companion projects from Linux CLI. Discover the real base, compatibility layer, license SDK, and BSP directories first, persist the required paths and platform settings into the current project's config.mk, then clean and rebuild only the project affected by the user's source changes. Do not modify unrelated repositories or replace unrelated library artifacts.
 ---
 
 # SylixOS CLI Build
 
 Use this skill when a workspace contains a SylixOS base project plus companion projects such as a Linux compatibility layer, a license SDK, and a BSP.
 
-Critical rule: all build paths must use absolute paths.
+Critical rule: all build paths used in commands must be absolute paths.
 
-Critical rule: for every project handled with this skill, if a build variable can
-be persisted in the project's `config.mk`, it must be written into `config.mk`
-instead of relying on a command-line override.
+Default behavior is discovery, current-project configuration, and a clean
+rebuild. Write required absolute paths and platform settings into the current
+project's `config.mk`; do not leave them as temporary command-line overrides.
+Do not rewrite Base, compatibility-layer, license, or unrelated repository files
+just to make the build command convenient. Do not manually replace unrelated
+`*.a`, `*.so`, or other BSP library artifacts. A dependency repository may be
+modified only when it is the requested target or a reproducible build failure
+requires debugging there, and the reason must be stated before editing.
 
-This is a universal rule for all future projects built with this skill, not a
-project-specific suggestion.
+Do not use relative paths such as `../base_xxx` in build commands. Do not add
+helper variables such as `CONFIG_MK_DIR` to project files.
 
-Keep command-line parameters only for values that cannot be stored in `config.mk`,
-such as the `-f "$MULTI_MK"` build entry itself.
+For BSP builds, never use `-j`, `--jobs`, or `--load-average`. Invoke the BSP
+build with inherited `MAKEFLAGS` and `MFLAGS` cleared:
 
-This applies to both:
+```sh
+env -u MAKEFLAGS -u MFLAGS make ...
+```
 
-- `config.mk` path variables
-- command-line variable overrides passed to `make`
-
-Do not use relative paths such as `../base_xxx`.
-Do not add helper variables such as `CONFIG_MK_DIR` to derive paths.
+This restriction applies only to the BSP project. Base, compatibility-layer,
+license SDK, and other projects may retain their default parallel configuration
+or use `-j` when it improves build time and does not conflict with that
+project's build behavior.
 
 ## Discovery
 
@@ -67,17 +73,19 @@ Before making risky multi-file changes in a component:
 
 1. record the current code version for that component
 2. if it is already a Git repository, note the branch, commit, or dirty state
-3. if it is not a Git repository, initialize a local Git repository before invasive debugging so later diffs and rollback are manageable
+3. if it is not a Git repository, record that fact; do not initialize Git automatically
 
-Recommended minimum when no Git history exists:
+When the component is already a Git repository, record its current state:
 
 ```sh
-git init
-git add -A
 git status --short
+git diff --binary -- <touched-paths> > docs/patches/<date>-before.patch
 ```
 
-Create a baseline commit or tag only when the user permits it. Even without a commit, a fresh local repository still improves visibility of later edits.
+When no Git history exists, do not run Git commands or initialize a repository
+automatically. Record that fact, preserve pre-change copies of the touched files,
+and use `diff -ruN` to generate the rollback patch. Create a repository,
+baseline commit, or tag only when the user explicitly authorizes it.
 
 ## Platform Selection
 
@@ -97,8 +105,8 @@ find "$BASE/libsylixos/build" -maxdepth 2 -type d | sort
 
 Rule:
 
-- If the base project actually corresponds to `ARM64_GENERIC`, set `PLATFORMS := ARM64_GENERIC`.
-- If the old BSP value is `ARM64_A55` but the available base layout/output is `ARM64_GENERIC`, change BSP `PLATFORMS` to `ARM64_GENERIC`.
+- If the base project actually corresponds to `ARM64_GENERIC`, use `ARM64_GENERIC` for this build command.
+- If the old BSP value is `ARM64_A55` but the available base layout/output is `ARM64_GENERIC`, report the mismatch and update the current project's `config.mk` to `ARM64_GENERIC` before building.
 
 For `ARM64_GENERIC`, the verified mapping is:
 
@@ -110,20 +118,10 @@ FPU_TYPE=default
 
 ## Config Update Strategy
 
-Preferred outcome: modify each companion project `config.mk` so the project can be
-built later from its own directory with `make ... -f "$MULTI_MK"` and without
-extra command-line variable overrides.
-
-All path variables must be absolute paths.
-
-If a variable can live in `config.mk`, do not leave it as a habitual command-line
-override. Persist it in `config.mk` for later manual builds.
-
-This applies to every follow-up project in the workspace as well:
-
-- first fix `config.mk`
-- then build with `-f "$MULTI_MK"`
-- do not treat a command-line variable override as the finished solution if that variable could have been stored in `config.mk`
+Inspect `config.mk`, then update the current project's configuration with the
+absolute paths and platform settings required for the requested build. This is
+the normal build preparation step, not a temporary workaround. Do not propagate
+the change into Base, compatibility, license, or unrelated repositories.
 
 What to update:
 
@@ -135,11 +133,11 @@ What to update:
 
 Rules:
 
-- Replace IDE variables like `$(WORKSPACE_...)` with absolute paths.
-- Do not use relative paths.
-- Do not add `CONFIG_MK_DIR`, `realpath`, or other path-derivation variables into `config.mk`.
-- Set `PLATFORMS` to the platform chosen from the real base layout.
-- Keep existing `DEBUG_LEVEL`, `FPU_TYPE`, `AMP_CONFIG`, and other project options unless the build requires a change.
+- Replace IDE variables such as `$(WORKSPACE_...)` with absolute paths in the
+  current project's `config.mk`.
+- Set `PLATFORMS` to the platform selected from the real Base layout.
+- Keep existing `DEBUG_LEVEL`, `FPU_TYPE`, `AMP_CONFIG`, and other project
+  options unchanged unless the requested build requires a change.
 
 Example shape only:
 
@@ -160,13 +158,16 @@ The multi-platform makefile is under the discovered base project:
 MULTI_MK="$BASE/libsylixos/SylixOS/mktemp/multi-platform.mk"
 ```
 
-The companion projects should be built with:
+For the BSP project, use no parallel options and clear inherited parallel flags:
 
 ```sh
-make all -f "$MULTI_MK"
+env -u MAKEFLAGS -u MFLAGS make all -f "$MULTI_MK"
 ```
 
-Use a dry run first:
+For Base or other non-BSP projects, use the project's normal build entry and
+retain its default parallel configuration; `-j` may be used when appropriate.
+
+Use a dry run first when the build entry or project scope is uncertain:
 
 ```sh
 make -n all -f "$MULTI_MK"
@@ -209,23 +210,41 @@ Rule:
   2. add a local wrapper `Makefile` target that forwards plain `make` and
      `make clean` into `multi-platform.mk`.
 
-## Build Order
+## Build Scope And Order
 
-Build dependencies before BSP:
+After source changes, always clean and rebuild the affected project. Do not use
+an incremental build. Clean only generated outputs through the supported make
+target; never delete source or user files.
+
+Use this scope decision:
+
+| Changed input | Required build |
+| --- | --- |
+| BSP source, BSP headers, or BSP build files | Clean and rebuild BSP only |
+| Compatibility layer, license SDK, or application source | Clean and rebuild that project only |
+| Base source, Base headers, Base ABI, Base configuration, or Base generated libraries | Clean and rebuild Base, then clean and rebuild affected downstream projects |
+| Documentation only | No build |
+
+For a BSP-only change, the normal command is:
 
 ```sh
-make -C "$LICENSE" all -f "$MULTI_MK"
-make -C "$COMPAT" all -f "$MULTI_MK"
-make -C "$BSP" all -f "$MULTI_MK"
+env -u MAKEFLAGS -u MFLAGS make -C "$BSP" clean -f "$MULTI_MK"
+env -u MAKEFLAGS -u MFLAGS make -C "$BSP" all -f "$MULTI_MK"
 ```
 
-Clean only when needed:
+Do not rebuild `"$BASE"`, `"$COMPAT"`, or `"$LICENSE"` for a BSP-only change.
+Only add those projects after confirming that their source, headers, ABI,
+configuration, toolchain, or linked outputs changed, and tell the user why.
 
-```sh
-make -C "$LICENSE" clean -f "$MULTI_MK"
-make -C "$COMPAT" clean -f "$MULTI_MK"
-make -C "$BSP" clean -f "$MULTI_MK"
-```
+### Library Artifact Rule
+
+Do not manually copy, substitute, or overwrite existing BSP libraries such as
+`*.a`, `*.so`, or driver archives when their source and dependency inputs have
+not changed. If a normal clean build regenerates an artifact because it belongs
+to the affected project, keep that result and record its path; do not replace
+unrelated library artifacts from another Base, branch, or historical build.
+If a library itself is broken or its source/dependencies changed, report the
+reason and include that library in the affected build scope.
 
 ## BSP Board Selection
 
@@ -240,60 +259,74 @@ BOARD_LIST += adp
 BOARD_LIST += tl3568_evm
 ```
 
-and the user explicitly asks for one board package, prefer changing that
-`BOARD_LIST` in the BSP `Makefile` to the requested board instead of using a
-command-line override like `BOARD_LIST=tl3568_evm`.
+and the user explicitly asks for one board package, inspect the selected board
+and use a command-line override such as `BOARD_LIST=tl3568_evm` when needed.
+Do not rewrite the BSP `Makefile` merely to perform a build.
 
-Reason:
-
-- in these projects, board package selection is a project-side build setting
-- keeping it in the `Makefile` matches the user's normal manual build path
-- it avoids leaving the real project state different from the command shown in
-  the session
-
-Use a command-line `BOARD_LIST=...` override only as a last-resort debugging
-fallback or when the user explicitly asks not to modify the file.
+State the override in the build record so the command remains reproducible.
 
 ## Command-Line Override Rule
 
-If `config.mk` is not yet fixed, command-line overrides must also use absolute
-paths only. This is fallback behavior, not the preferred steady state.
-
-Do not keep passing variables on the command line once they can be written into
-`config.mk`. The usual remaining command-line-only piece is the `-f "$MULTI_MK"`
-selection.
-
-For every project using this skill, the final handoff state must move all
-persistable variables into `config.mk`. Do not leave the user with a build
-procedure that still depends on command-line overrides for `SYLIXOS_BASE_PATH`,
-`LINUX_COMPAT_LAYER_PATH`, `LICENSE_SDK_PATH`, `PLATFORMS`, or project-local
-workspace path variables if those can be defined in `config.mk`.
+Use command-line overrides only as a fallback when the current project's
+`config.mk` cannot express the required setting or when the user explicitly
+requests a temporary experiment. All path values must be absolute. The normal
+handoff state must retain the required configuration in `config.mk`.
 
 Example shape:
 
 ```sh
-make -C "$BSP" all -f "$MULTI_MK" \
+env -u MAKEFLAGS -u MFLAGS make -C "$BSP" all -f "$MULTI_MK" \
   SYLIXOS_BASE_PATH="$BASE" \
   LINUX_COMPAT_LAYER_PATH="$COMPAT" \
   LICENSE_SDK_PATH="$LICENSE" \
   PLATFORMS=ARM64_GENERIC
 ```
 
-Do not pass relative paths in command-line overrides.
+Do not pass relative paths in command-line overrides. Do not add parallel
+options to BSP build commands. For non-BSP projects, follow the project or Base
+build configuration for parallelism.
+
+## Modification Record And Patch
+
+For every non-trivial debugging or code-change task, record the pre-change state
+before editing:
+
+```sh
+mkdir -p docs/patches
+git status --short
+git branch --show-current
+git rev-parse HEAD 2>/dev/null || true
+git diff --binary -- <touched-paths> > docs/patches/<date>-before.patch
+```
+
+After editing, save the corresponding patch without staging or committing:
+
+```sh
+git diff --binary -- <touched-paths> > docs/patches/<date>-after.patch
+```
+
+For an untracked touched file, also record it explicitly with
+`git diff --no-index --binary /dev/null <file>`; that command returns status 1
+when differences exist, which is expected. If the repository was already dirty,
+keep the before and after patch files so pre-existing changes can be separated
+from the current task. If the directory is not a Git repository, save the
+pre-change files under `docs/patches/<date>-before/` and generate the final
+patch with `diff -ruN <before-dir> <working-tree> >
+docs/patches/<date>-after.patch` instead of initializing Git.
+
+The process document must list each current modification precisely: file path,
+function or symbol, line location, old behavior, new behavior, reason, expected
+effect, exact build command, and compile/runtime result. Do not write vague
+entries such as “adapted PCI driver”.
 
 ## Validation
 
-After editing `config.mk`, verify that the platform-aware entry works from each
-project directory without extra variable parameters beyond the required
-`-f "$MULTI_MK"` build entry:
+Validate only the project included in the build-scope decision. For a BSP-only
+change, use a clean single-threaded build:
 
 ```sh
-make -C "$LICENSE" all -f "$MULTI_MK"
-make -C "$LICENSE" clean -f "$MULTI_MK"
-make -C "$COMPAT" all -f "$MULTI_MK"
-make -C "$COMPAT" clean -f "$MULTI_MK"
-make -C "$BSP" all -f "$MULTI_MK"
-make -C "$BSP" clean -f "$MULTI_MK"
+env -u MAKEFLAGS -u MFLAGS make -C "$BSP" clean -f "$MULTI_MK"
+env -u MAKEFLAGS -u MFLAGS make -C "$BSP" all -f "$MULTI_MK"
 ```
 
 If you intentionally added a local wrapper `Makefile`, also verify:
@@ -328,11 +361,11 @@ run.
 
 ## Common Failures
 
-- `config.mk` still contains `$(WORKSPACE_...)`: replace it with absolute paths.
-- `config.mk` uses relative paths: replace them with absolute paths.
-- Command-line overrides use relative paths: replace them with absolute paths.
+- `config.mk` still contains `$(WORKSPACE_...)`: replace it with absolute paths in the current project's `config.mk`.
+- `config.mk` uses relative paths: replace them with absolute paths in the current project's `config.mk`.
+- Command-line overrides use relative paths: replace them with absolute paths before running the command.
 - Plain `make clean` left `build/<PLATFORM>/Release` behind: rerun through
   `make clean -f "$MULTI_MK"` or add a local wrapper `Makefile`.
 - `PLATFORMS` does not match the real base layout: inspect `platforms.mk` and `libsylixos/build`.
-- BSP cannot find compatibility layer or license SDK outputs: check absolute dependency paths and build order.
+- BSP cannot find compatibility layer or license SDK outputs: check absolute dependency paths and build order, then report whether a dependency rebuild is actually required.
 - `aarch64-sylixos-elf-gcc` not found: ensure the SylixOS toolchain is in `PATH`.

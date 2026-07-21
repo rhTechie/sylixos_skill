@@ -82,7 +82,12 @@ and the user intends the board to boot from the new image, use this stricter flo
 
 The reboot itself belongs to the telnet validation step, but the upload skill
 must surface that a post-upload reboot is mandatory for the image to take
-effect.
+effect. Hand the validation step a reconnect deadline of 60 seconds by default,
+or 30 seconds when the user explicitly requests it. The default recovery
+criterion is that at least one of ping or Telnet is available; enforce both only
+when the board acceptance criteria require both. If neither channel recovers
+within the deadline, stop all further uploads and reboots, preserve the backup
+and logs, and request human or serial-console intervention.
 
 ## Command Patterns
 

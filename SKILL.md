@@ -29,12 +29,17 @@ Apply these habits across all SylixOS sub-skills:
 3. Prefer result files or log files over long live console streams for meaningful tests and validation runs; do not create standalone build logs by default for ordinary successful rebuilds unless the user asks or failure capture is needed.
 4. Record exact commands, CPU placement assumptions, board IPs, and result or log file paths when the task is in one of the documented investigation or validation modes above.
 5. Record the code version of every touched component before risky changes.
-6. If the target code directory has no Git history, initialize a local Git repository before invasive multi-file debugging so diffs and rollbacks are manageable.
-7. For driver porting, record the original Linux pattern, the chosen SylixOS pattern, wrapper/callback points inspected, and whether the result is source-review-only, compile-only, or board-verified.
-8. When a timing problem has no clear next hypothesis, split the path with timestamp instrumentation and narrow it stage by stage; do this in the app, driver, or base layer as needed.
-9. After a major validation round, restore both the DUT and the peer board to a clean state when state carry-over could contaminate the next result.
-10. When replacing BSP boot images, treat upload as incomplete until the new image is copied into `/boot`, `sync` is issued on the board, the board is rebooted, and the post-reboot build time is verified.
-11. For complex SylixOS tasks, default to multi-agent processing (`请用多 agent 模式处理`) when subagents are available and the work can be split safely. Complex tasks include driver porting, multi-file code bug debugging, root-cause investigation, board-side problem triage, networking validation, long-run validation, and build-upload-test failures. Keep one main agent responsible for planning, integration, conflict resolution, and final verification; keep simple build/upload/test requests single-agent unless complexity emerges.
+6. Do not modify or replace Base, compatibility layers, license SDKs, unrelated repositories, or prebuilt BSP library artifacts merely to test a hypothesis. When the current project must be built, persist its required paths and platform settings in that project's `config.mk` instead of relying on temporary command-line parameters.
+7. Do not initialize Git, create commits, change branches, or alter unrelated repositories automatically. Preserve the existing dirty state and record it instead.
+8. For driver porting, record the original Linux pattern, the chosen SylixOS pattern, wrapper/callback points inspected, and whether the result is source-review-only, compile-only, or board-verified.
+9. When a timing problem has no clear next hypothesis, split the path with timestamp instrumentation and narrow it stage by stage; do this in the app, driver, or base layer as needed, but only after the debugging change is explicitly communicated.
+10. After a major validation round, restore both the DUT and the peer board to a clean state when state carry-over could contaminate the next result, without changing source repositories unless authorized.
+11. When replacing BSP boot images, treat upload as incomplete until the new image is copied into `/boot`, `sync` is issued on the board, the board is rebooted, and the post-reboot build time is verified. After reboot, poll both ICMP ping and Telnet and require at least one management channel to recover within 60 seconds by default; use 30 seconds when the user explicitly sets that limit. If the target acceptance criteria require both channels, record and enforce that stricter condition. If the deadline expires with neither channel available, classify the candidate as failed, stop further uploads and reboots, preserve the logs and backup image, and request human or serial-console intervention.
+12. Write process, migration, debugging, and validation documents in Chinese by default. Keep commands, paths, source identifiers, logs, hashes, and API names unchanged, while translating explanatory prose and headings unless the user requests another language.
+13. After source changes, never use an incremental build. Clean and rebuild only the changed project and its outputs. Do not rebuild the Base project for a BSP-only change; rebuild Base first only when Base source, headers, ABI, toolchain, configuration, or generated libraries actually changed, then rebuild affected downstream projects.
+14. BSP 工程构建时禁止使用 `-j`、`--jobs`、`--load-average` 等并行参数，并清除继承的 `MAKEFLAGS` 和 `MFLAGS`。Base、兼容层、license SDK 等其他工程不适用此限制，可遵循工程默认配置或根据构建耗时酌情使用并行编译。
+15. For every non-trivial code change, record exact modification points in the process document and save a before/after patch. Include file path, function or symbol, line location, behavior change, rationale, build command, and validation result. Do not stage or commit automatically.
+16. For complex SylixOS tasks, default to multi-agent processing (`请用多 agent 模式处理`) when subagents are available and the work can be split safely. Complex tasks include driver porting, multi-file code bug debugging, root-cause investigation, board-side problem triage, networking validation, long-run validation, and build-upload-test failures. Keep one main agent responsible for planning, integration, conflict resolution, and final verification; keep simple build/upload/test requests single-agent unless complexity emerges.
 
 ## Sub-Skills
 
@@ -50,9 +55,9 @@ This master skill delegates to specialized sub-skills:
 
 **What it does:**
 - Discovers workspace layout (base, compat layer, license SDK, BSP)
-- Updates config.mk with absolute paths
+- Updates the current project's config.mk with the required build paths and platform settings
 - Determines correct platform (ARM64_GENERIC, etc.)
-- Executes build using multi-platform.mk
+- Cleanly rebuilds only the affected project using multi-platform.mk; BSP builds are single-threaded while other projects may use their normal parallel settings
 - Reports build results
 
 **Location:** `sylixos_cli_build/SKILL.md`
@@ -248,8 +253,8 @@ User: "编译 lynxi_driver_hm100"
 Action:
 1. Apply sylixos_cli_build skill
 2. Discover workspace layout
-3. Update config.mk
-4. Execute make with multi-platform.mk
+3. Update the current project's config.mk and record the repository state
+4. Clean and rebuild only the affected project with multi-platform.mk
 5. Report build results
 ```
 
@@ -289,8 +294,8 @@ User: "编译 timer_test，上传到板卡并通过 telnet 测试"
 Action:
 1. Apply sylixos_cli_build skill
    - Discover the real base project
-   - Update config.mk with absolute paths
-   - Build with multi-platform.mk
+   - Update the current project's config.mk and record the repository state
+   - Clean and rebuild only the affected project with multi-platform.mk
 2. If build succeeds:
    - Apply sylixos_ftp_upload skill
    - Parse .reproject

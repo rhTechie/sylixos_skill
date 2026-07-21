@@ -61,8 +61,12 @@ Each major entry should include:
 - the current hypothesis, the code change made for it, and the expected observation
 - whether the result is verified on hardware, compile-only, source-review-only, or still candidate
 - rollback note when a change is experimental or only for instrumentation
+- write the process document in Chinese by default; keep commands, paths, source identifiers, logs, hashes, and API names unchanged
 
-If the target code directory has no Git history and the work will touch multiple files, initialize a local Git repository before invasive edits so diffs and rollbacks stay manageable.
+If the target code directory has no Git history, record that fact and preserve
+the files as-is. Do not initialize a local Git repository automatically. Use
+patch files or an explicitly authorized repository setup when precise rollback
+tracking is needed.
 
 Prefer result files or log files over long live telnet streams. Do not paste raw logs into the final reusable summary; reference the saved paths and extract only the conclusion that matters.
 

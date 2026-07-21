@@ -163,12 +163,20 @@ Required sequence:
 1. verify the expected boot image files exist in `/boot`
 2. run `sync`
 3. execute an explicit `reboot`
-4. wait for network reconnection instead of assuming immediate availability
-5. log back in and verify the boot banner or equivalent runtime version output
+4. start a reconnect deadline of 60 seconds by default, or 30 seconds when the
+   user explicitly sets that limit
+5. poll ICMP ping and TCP port 23/Telnet during that deadline; by default,
+   require at least one channel to recover, and require both when the board
+   acceptance criteria explicitly demand both
+6. log back in and verify the boot banner or equivalent runtime version output
    shows the expected build time
 
 Treat the image replacement as unverified until the post-reboot build time is
-confirmed.
+confirmed. Do not use a successful FTP upload as a substitute for this check.
+If the reconnect deadline expires before either ping or Telnet recovers, classify
+the image as failed, stop further uploads and reboots, preserve the last log and
+backup image, and request human or serial-console intervention. Do not continue
+automated testing while the board may be in a reboot loop.
 
 ## Reporting Requirements
 
@@ -180,6 +188,8 @@ Always report:
 - whether execute permission had to be fixed
 - key board-side output
 - whether the shell prompt returned normally
+- reconnect duration, configured deadline, and which management channel(s)
+  recovered after reboot
 - for BSP image replacement, whether the post-reboot build time matched the expected image
 
 ## Common SylixOS Notes
@@ -198,6 +208,9 @@ Always report:
 
 - `ping` fails: report board unreachable
 - port `23` closed: report telnet unavailable
+- after an image replacement, if neither ping nor Telnet has recovered before
+  the configured deadline, stop the workflow and escalate instead of retrying
+  indefinitely
 
 ### Authentication Errors
 
